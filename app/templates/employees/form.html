@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}{{ emp.full_name if edit else 'Новый мастер' }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('employees.index') }}">Мастера</a></div>
+<div class="page-head">
+  <h1>{{ emp.full_name if edit else 'Новый мастер' }}</h1>
+  {% if edit %}<div class="actions"><a class="btn" href="{{ url_for('salary.detail', employee_id=emp.id) }}">{{ icon('salary') }}Зарплата</a></div>{% endif %}
+</div>
+<form method="post" class="card" style="max-width: 760px;">
+  {{ csrf() }}
+  <div class="card-body">
+    <div class="form-grid">
+      <div class="field full"><label for="full_name">ФИО *</label><input type="text" id="full_name" name="full_name" value="{{ emp.full_name or '' }}" required autofocus></div>
+      <div class="field"><label for="position">Должность</label><input type="text" id="position" name="position" value="{{ emp.position or '' }}" placeholder="Мастер-дизелист"></div>
+      <div class="field"><label for="phone">Телефон</label><input type="tel" id="phone" name="phone" value="{{ emp.phone or '' }}"></div>
+      <div class="field full"><label for="notes">Заметки</label><textarea id="notes" name="notes" rows="2">{{ emp.notes or '' }}</textarea></div>
+      <div class="field full"><label class="check"><input type="checkbox" name="is_active" value="1" {{ 'checked' if emp.is_active }}>Работает (снимите галочку при увольнении — история и зарплата сохранятся)</label></div>
+    </div>
+  </div>
+  <div class="card-foot form-actions" style="margin-top: 0;">
+    <button class="btn btn-primary">Сохранить</button>
+    <a class="btn btn-ghost" href="{{ url_for('employees.index') }}">Отмена</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% from "macros.html" import csrf with context %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %} · {{ company_name or "Дизель Сервис" }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="brand"><span class="brand-mark">ДС</span><span>{{ company_name or "Дизель Сервис" }}</span></div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}<div class="flashes">{% for c, m in messages %}<div class="flash flash-{{ c }}">{{ m }}</div>{% endfor %}</div>{% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </div>
+</div>
+</body>
+</html>

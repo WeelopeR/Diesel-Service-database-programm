@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Мастера{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Мастера</h1><div class="sub">Назначаются на работы в заказ-нарядах, по ним считается зарплата. В программу мастера не входят.</div></div>
+  <div class="actions"><a class="btn btn-primary" href="{{ url_for('employees.create') }}">{{ icon('plus') }}Новый мастер</a></div>
+</div>
+<div class="card">
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>ФИО</th><th>Должность</th><th class="hide-sm">Телефон</th><th class="num">Выполнено работ</th><th></th></tr></thead>
+      <tbody>
+      {% for e in rows %}
+        <tr data-href="{{ url_for('employees.edit', employee_id=e.id) }}" class="{{ 'row-muted' if not e.is_active }}">
+          <td><a class="strong" href="{{ url_for('employees.edit', employee_id=e.id) }}">{{ e.full_name }}</a>{% if not e.is_active %} <span class="badge">не работает</span>{% endif %}</td>
+          <td>{{ e.position or '—' }}</td>
+          <td class="hide-sm nowrap">{{ e.phone or '' }}</td>
+          <td class="num">{{ e.works }}</td>
+          <td class="actions-cell"><a class="btn btn-sm btn-ghost" href="{{ url_for('salary.detail', employee_id=e.id) }}">Зарплата</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">Мастеров пока нет. <a href="{{ url_for('employees.create') }}">Добавьте первого</a>.</div>
+  {% endif %}
+</div>
+{% endblock %}

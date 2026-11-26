@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}{{ 'Редактирование записи' if edit else ('Новый доход' if tx.kind == 'income' else 'Новый расход') }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('finance.index') }}">Доходы и расходы</a></div>
+<div class="page-head"><h1>{{ 'Редактирование записи' if edit else ('Новый доход' if tx.kind == 'income' else 'Новый расход') }}</h1></div>
+<form method="post" class="card" style="max-width: 720px;">
+  {{ csrf() }}
+  <div class="card-body">
+    {% if tx.order_id %}<div class="notice" style="margin-bottom: 14px;">Это оплата по <a href="{{ url_for('orders.view', order_id=tx.order_id) }}">заказ-наряду № {{ tx.order_number|order_no(tx.order_year) }}</a>.</div>{% endif %}
+    <div class="form-grid" data-kind-switch="categories" data-income='{{ income_categories|tojson }}' data-expense='{{ expense_categories|tojson }}'>
+      {% if not tx.order_id %}
+      <div class="field full">
+        <span class="label">Тип</span>
+        <div class="segmented">
+          <label><input type="radio" name="kind" value="income" {{ 'checked' if tx.kind == 'income' }}><span>Доход</span></label>
+          <label><input type="radio" name="kind" value="expense" {{ 'checked' if tx.kind == 'expense' }}><span>Расход</span></label>
+        </div>
+      </div>
+      {% else %}<input type="hidden" name="kind" value="income">{% endif %}
+      <div class="field"><label for="amount">Сумма, ₽ *</label><input type="text" inputmode="decimal" id="amount" name="amount" value="{{ tx.amount|num if tx.amount else '' }}" required autofocus></div>
+      <div class="field"><label for="date">Дата</label><input type="date" id="date" name="date" value="{{ tx.date }}"></div>
+      <div class="field">
+        <label for="category">Статья *</label>
+        <input type="text" id="category" name="category" value="{{ tx.category or '' }}" list="categories" required placeholder="Выберите или впишите свою">
+        <datalist id="categories">{% for c in categories %}<option value="{{ c }}">{% endfor %}</datalist>
+      </div>
+      <div class="field"><label for="method">Способ</label><select id="method" name="method">{% for k, v in PAYMENT_METHODS.items() %}<option value="{{ k }}" {{ 'selected' if tx.method == k }}>{{ v }}</option>{% endfor %}</select></div>
+      <div class="field full"><label for="description">Описание</label><input type="text" id="description" name="description" value="{{ tx.description or '' }}"></div>
+      {% if not tx.order_id %}
+      <div class="field full">
+        <label for="employee_id">Мастер</label>
+        <select id="employee_id" name="employee_id">
+          <option value="">—</option>
+          {% for e in employees %}<option value="{{ e.id }}" {{ 'selected' if tx.employee_id == e.id }}>{{ e.full_name }}</option>{% endfor %}
+        </select>
+        <div class="hint">Укажите мастера для выплат зарплаты и авансов — такой расход уменьшит его остаток к выплате.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card-foot form-actions" style="margin-top: 0;">
+    <button class="btn btn-primary">Сохранить</button>
+    <a class="btn btn-ghost" href="{{ url_for('finance.index') }}">Отмена</a>
+  </div>
+</form>
+{% endblock %}

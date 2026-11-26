@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}{{ client.name }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('clients.index') }}">Клиенты</a></div>
+<div class="page-head">
+  <div>
+    <h1>{{ client.name }}</h1>
+    <div class="sub">{{ CLIENT_KINDS[client.kind] }} · в базе с {{ client.created_at|date }}</div>
+  </div>
+  <div class="actions">
+    <a class="btn btn-primary" href="{{ url_for('orders.create', client_id=client.id) }}">{{ icon('plus') }}Заказ-наряд</a>
+    <a class="btn" href="{{ url_for('clients.edit', client_id=client.id) }}">{{ icon('edit') }}Изменить</a>
+    {% if not orders %}
+    <form class="inline" method="post" action="{{ url_for('clients.delete', client_id=client.id) }}" data-confirm="Удалить клиента и его технику?">{{ csrf() }}<button class="btn btn-danger">{{ icon('trash') }}Удалить</button></form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid grid-main">
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>Техника</h2><a class="btn btn-sm" href="{{ url_for('clients.vehicle_create', client_id=client.id) }}">{{ icon('plus') }}Добавить</a></div>
+      {% if vehicles %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Техника</th><th>Госномер</th><th class="hide-sm">VIN</th><th class="hide-sm">Двигатель / ТА</th><th></th></tr></thead>
+          <tbody>
+          {% for v in vehicles %}
+            <tr>
+              <td class="strong">{{ v.make or '' }} {{ v.model or '' }}{% if v.year %} <span class="muted">({{ v.year }})</span>{% endif %}</td>
+              <td class="nowrap">{{ v.plate or '—' }}</td>
+              <td class="hide-sm">{{ v.vin or '—' }}</td>
+              <td class="hide-sm">{{ v.engine or '' }}{% if v.fuel_system %}<div class="muted small">{{ v.fuel_system }}</div>{% endif %}</td>
+              <td class="actions-cell">
+                <a class="btn btn-sm btn-ghost" href="{{ url_for('orders.create', client_id=client.id, vehicle_id=v.id) }}">В заказ</a>
+                <a class="btn btn-sm btn-ghost btn-icon" title="Изменить" href="{{ url_for('clients.vehicle_edit', vehicle_id=v.id) }}">{{ icon('edit') }}</a>
+                <form class="inline" method="post" action="{{ url_for('clients.vehicle_delete', vehicle_id=v.id) }}" data-confirm="Удалить эту технику?">{{ csrf() }}<button class="btn btn-sm btn-ghost btn-icon" title="Удалить">{{ icon('trash') }}</button></form>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">Техника не добавлена.</div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>История обращений</h2><span class="muted small">{{ orders|length }} заказ-нарядов</span></div>
+      {% if orders %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>№</th><th>Дата</th><th>Техника</th><th>Статус</th><th class="num">Сумма</th><th class="num">Оплата</th></tr></thead>
+          <tbody>
+          {% for o in orders %}
+            <tr data-href="{{ url_for('orders.view', order_id=o.id) }}">
+              <td class="nowrap"><a class="strong" href="{{ url_for('orders.view', order_id=o.id) }}">{{ o|order_no }}</a></td>
+              <td class="nowrap">{{ o.created_at|date }}</td>
+              <td>{{ o|vehicle if o.make or o.model or o.plate else '—' }}</td>
+              <td>{{ status_badge(o.status) }}</td>
+              <td class="num">{{ o.total|money }}</td>
+              <td class="num">{% if o.status == 'cancelled' or not o.total %}<span class="muted">—</span>{% elif o.due <= 0.009 %}<span class="badge badge-success">оплачен</span>{% elif o.status == 'issued' %}<span class="badge badge-danger">долг {{ o.due|money }}</span>{% else %}<span class="badge badge-outline">{{ 'не оплачен' if not o.paid else 'к оплате ' ~ (o.due|money) }}</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">Обращений пока не было.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>Контакты</h2></div>
+      <div class="card-body">
+        <dl class="props">
+          <dt>Телефон</dt><dd>{% if client.phone %}<a href="tel:{{ client.phone }}">{{ client.phone }}</a>{% else %}—{% endif %}</dd>
+          {% if client.phone2 %}<dt>Доп. телефон</dt><dd><a href="tel:{{ client.phone2 }}">{{ client.phone2 }}</a></dd>{% endif %}
+          <dt>E-mail</dt><dd>{{ client.email or '—' }}</dd>
+          {% if client.inn %}<dt>ИНН</dt><dd>{{ client.inn }}</dd>{% endif %}
+          <dt>Адрес</dt><dd class="pre">{{ client.address or '—' }}</dd>
+        </dl>
+        {% if client.notes %}<p class="pre" style="margin-top: 12px;">{{ client.notes }}</p>{% endif %}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Расчёты</h2></div>
+      <div class="card-body">
+        <div class="totals">
+          <span>Сумма заказ-нарядов</span><span class="num">{{ stats.billed|money }}</span>
+          <span>Оплачено</span><span class="num text-success">{{ stats.paid|money }}</span>
+          {% if stats.open_due > 0.009 %}<span>К оплате по открытым</span><span class="num">{{ stats.open_due|money }}</span>{% endif %}
+          <span class="grand">Долг</span><span class="grand num {{ 'text-danger' if stats.debt > 0.009 }}">{{ stats.debt|money }}</span>
+        </div>
+        <p class="muted small" style="margin: 10px 0 0;">Долг — выданная техника, оплаченная не полностью.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

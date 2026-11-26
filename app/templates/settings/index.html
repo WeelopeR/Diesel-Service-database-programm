@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Настройки{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Настройки</h1></div>
+<div class="grid grid-main">
+  <form method="post" class="card">
+    {{ csrf() }}
+    <div class="card-head"><h2>Реквизиты для печатных форм</h2></div>
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="field full"><label for="company_name">Название сервиса</label><input type="text" id="company_name" name="company_name" value="{{ settings.company_name }}"></div>
+        <div class="field"><label for="company_phone">Телефон</label><input type="text" id="company_phone" name="company_phone" value="{{ settings.company_phone }}"></div>
+        <div class="field"><label for="company_address">Адрес</label><input type="text" id="company_address" name="company_address" value="{{ settings.company_address }}"></div>
+        <div class="field full"><label for="company_requisites">Реквизиты</label><textarea id="company_requisites" name="company_requisites" rows="4" placeholder="ИП Иванов И. И.&#10;ИНН …, ОГРНИП …&#10;р/с … в банке …, БИК …">{{ settings.company_requisites }}</textarea><div class="hint">Печатаются в правом верхнем углу заказ-наряда.</div></div>
+        <div class="field full"><label for="order_footer">Текст внизу заказ-наряда</label><textarea id="order_footer" name="order_footer" rows="4">{{ settings.order_footer }}</textarea><div class="hint">Условия гарантии, порядок приёмки и т. п.</div></div>
+      </div>
+    </div>
+    <div class="card-foot"><button class="btn btn-primary">Сохранить</button></div>
+  </form>
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>Резервная копия</h2></div>
+      <div class="card-body stack">
+        <p>Скачайте файл с полной копией базы. Делайте копию хотя бы раз в неделю и храните её отдельно от компьютера с программой (флешка, облако).</p>
+        <a class="btn btn-primary" href="{{ url_for('settings.backup') }}">Скачать копию базы</a>
+        <p class="muted small" style="margin: 0;">Чтобы восстановить данные из копии, остановите программу и замените файл <code>{{ db_path.name }}</code> в папке <code>data</code> скачанным файлом (переименовав его).</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>База данных</h2></div>
+      <div class="card-body">
+        <dl class="props">
+          <dt>Клиентов</dt><dd>{{ stats.clients }}</dd>
+          <dt>Заказ-нарядов</dt><dd>{{ stats.orders }}</dd>
+          <dt>Позиций склада</dt><dd>{{ stats.parts }}</dd>
+          <dt>Фин. операций</dt><dd>{{ stats.transactions }}</dd>
+          <dt>Размер</dt><dd>{{ (db_size / 1024)|round(1) }} КБ</dd>
+          <dt>Файл</dt><dd class="small">{{ db_path }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

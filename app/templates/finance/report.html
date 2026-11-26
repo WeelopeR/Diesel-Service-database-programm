@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Отчёт за {{ year }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('finance.index') }}">Доходы и расходы</a></div>
+<div class="page-head">
+  <div><h1>Отчёт за {{ year }} год</h1></div>
+  <div class="pills">{% for y in years %}<a class="pill {{ 'active' if y == year }}" href="{{ url_for('finance.report', year=y) }}">{{ y }}</a>{% endfor %}</div>
+</div>
+<div class="kpis">
+  <div class="kpi"><div class="kpi-label">Доходы за год</div><div class="kpi-value text-success">{{ total_income|money }}</div></div>
+  <div class="kpi"><div class="kpi-label">Расходы за год</div><div class="kpi-value text-danger">{{ total_expense|money }}</div></div>
+  <div class="kpi"><div class="kpi-label">Прибыль за год</div><div class="kpi-value {{ 'text-danger' if total_income < total_expense }}">{{ (total_income - total_expense)|money }}</div></div>
+</div>
+<div class="grid grid-main">
+  <div class="card">
+    <div class="card-head"><h2>По месяцам</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Месяц</th><th class="num">Доходы</th><th class="num">Расходы</th><th class="num">Прибыль</th></tr></thead>
+        <tbody>
+        {% for r in table %}
+          <tr class="{{ 'row-muted' if not r.income and not r.expense }}">
+            <td><a href="{{ url_for('finance.index', start=r.start, end=r.end) }}">{{ r.name }}</a></td>
+            <td class="num">{{ r.income|money }}</td>
+            <td class="num">{{ r.expense|money }}</td>
+            <td class="num strong {{ 'text-danger' if r.profit < 0 }}">{{ r.profit|money }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+        <tfoot><tr><td>Итого</td><td class="num">{{ total_income|money }}</td><td class="num">{{ total_expense|money }}</td><td class="num">{{ (total_income - total_expense)|money }}</td></tr></tfoot>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>По статьям за год</h2></div>
+    {% if categories %}
+    <table class="table">
+      <tbody>
+      {% for c in categories %}
+        <tr><td>{{ c.category }}</td><td class="num strong {{ 'text-success' if c.kind == 'income' else 'text-danger' }}">{{ '+' if c.kind == 'income' else '−' }}{{ c.total|money }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="empty">Нет данных</div>{% endif %}
+  </div>
+</div>
+{% endblock %}

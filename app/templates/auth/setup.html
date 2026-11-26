@@ -1,0 +1,25 @@
+{% extends "auth/base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Первый запуск{% endblock %}
+{% block content %}
+<form class="card" method="post">
+  {{ csrf() }}
+  <div class="card-body stack">
+    <div>
+      <h1>Первый запуск</h1>
+      <p class="muted" style="margin-top: 6px;">Придумайте пароль для входа в программу. Логин не нужен — входить будете только по паролю.</p>
+    </div>
+    {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
+    <div class="field">
+      <label for="password">Пароль</label>
+      <input type="password" id="password" name="password" autocomplete="new-password" required minlength="8" autofocus>
+      <div class="hint">Не короче 8 символов. Если программа будет доступна из интернета, придумайте надёжный пароль.</div>
+    </div>
+    <div class="field">
+      <label for="password2">Пароль ещё раз</label>
+      <input type="password" id="password2" name="password2" autocomplete="new-password" required>
+    </div>
+    <button class="btn btn-primary" style="width: 100%;">Сохранить и войти</button>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Приход товара{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('warehouse.index') }}">Склад</a></div>
+<div class="page-head">
+  <div><h1>Приход товара</h1><div class="sub">Поступление от поставщика. Нет нужной позиции? <a href="{{ url_for('warehouse.create') }}" target="_blank">Создайте её</a> и обновите страницу.</div></div>
+</div>
+{% if not parts %}
+<div class="card"><div class="empty">На складе ещё нет ни одной позиции. <a href="{{ url_for('warehouse.create') }}">Создайте позицию</a> — начальный остаток можно указать сразу.</div></div>
+{% else %}
+<form method="post" class="stack">
+  {{ csrf() }}
+  <div class="card">
+    <div class="card-body">
+      <div class="form-grid form-grid-3">
+        <div class="field"><label for="supplier">Поставщик</label><input type="text" id="supplier" name="supplier"></div>
+        <div class="field"><label for="document">Документ (накладная, счёт)</label><input type="text" id="document" name="document" placeholder="№ и дата"></div>
+        <div class="field"><label for="date">Дата</label><input type="date" id="date" name="date" value="{{ today_iso }}"></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Позиции</h2><button type="button" class="btn btn-sm" id="receipt-add">{{ icon('plus') }}Строка</button></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th style="min-width: 260px;">Позиция</th><th style="width: 110px;">Кол-во</th><th style="width: 130px;">Цена закупки</th><th style="width: 150px;">Цена продажи</th><th class="num" style="width: 110px;">Сумма</th><th style="width: 40px;"></th></tr></thead>
+        <tbody id="receipt-rows" data-preselect="{{ preselect or '' }}"></tbody>
+        <tfoot><tr><td colspan="4" class="num">Итого</td><td class="num" id="receipt-total">0 ₽</td><td></td></tr></tfoot>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body stack">
+      <label class="check"><input type="checkbox" name="update_prices" value="1" checked>Обновить цену закупки в карточках позиций (цена продажи пересчитается по наценке)</label>
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <label class="check"><input type="checkbox" name="record_expense" value="1" checked>Записать сумму в расходы («Закупка запчастей»)</label>
+        <select name="method" style="width: auto;">{% for k, v in PAYMENT_METHODS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+      </div>
+    </div>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary">Оформить приход</button><a class="btn btn-ghost" href="{{ url_for('warehouse.index') }}">Отмена</a></div>
+</form>
+<template id="receipt-row-template">
+  <tr>
+    <td>
+      <input type="search" class="compact picker-filter" data-row-filter placeholder="Поиск…">
+      <select name="part_id" class="compact">
+        <option value="">— выберите —</option>
+        {% set ns = namespace(cat=-1) %}
+        {% for p in parts %}{% if p.category_id != ns.cat %}{% if ns.cat != -1 %}</optgroup>{% endif %}<optgroup label="{{ p.category_name or 'Без типа' }}">{% set ns.cat = p.category_id %}{% endif %}<option value="{{ p.id }}" data-price="{{ p.purchase_price|num }}" data-sale="{{ p.sale_price|money }}" data-markup="{{ p.markup_percent|num }}" data-unit="{{ p.unit }}">{{ p.name }}{% if p.sku %} · {{ p.sku }}{% endif %} (ост. {{ p.quantity|qty }})</option>{% endfor %}{% if ns.cat != -1 %}</optgroup>{% endif %}
+      </select>
+    </td>
+    <td><input type="text" inputmode="decimal" name="quantity" class="compact" value="1"><div class="muted small" data-unit></div></td>
+    <td><input type="text" inputmode="decimal" name="price" class="compact"></td>
+    <td class="muted small" data-sale></td>
+    <td class="num" data-sum></td>
+    <td><button type="button" class="btn btn-sm btn-ghost btn-icon" data-remove title="Убрать строку">{{ icon('trash') }}</button></td>
+  </tr>
+</template>
+{% endif %}
+{% endblock %}

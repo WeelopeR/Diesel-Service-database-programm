@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Склад{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Склад</h1><div class="sub">Выберите тип запчастей — у каждого своя страница с колонками, фильтрами и сортировкой</div></div>
+  <div class="actions">
+    <a class="btn btn-primary" href="{{ url_for('warehouse.receipt') }}">{{ icon('plus') }}Приход товара</a>
+    <a class="btn" href="{{ url_for('warehouse.create') }}">Новая позиция</a>
+    <a class="btn btn-ghost" href="{{ url_for('warehouse.movements') }}">Движение</a>
+    <a class="btn btn-ghost" href="{{ url_for('warehouse.manage_categories') }}">Типы запчастей</a>
+  </div>
+</div>
+
+<form class="card filters-card warehouse-search" method="get" action="{{ url_for('warehouse.items', scope='all') }}">
+  <label for="q" class="sr-only">Поиск по всему складу</label>
+  <input type="search" id="q" name="q" placeholder="Поиск по всему складу: артикул или название" autofocus>
+  <button class="btn btn-primary">{{ icon('search') }}Найти</button>
+</form>
+
+<div class="kpis">
+  <a class="kpi" href="{{ url_for('warehouse.items', scope='all') }}"><div class="kpi-label">Позиций на складе</div><div class="kpi-value">{{ totals.positions }}</div><div class="kpi-note">все типы</div></a>
+  <div class="kpi"><div class="kpi-label">Остаток по закупке</div><div class="kpi-value">{{ totals.cost|money }}</div></div>
+  <div class="kpi"><div class="kpi-label">Остаток по цене продажи</div><div class="kpi-value">{{ totals.retail|money }}</div></div>
+  <a class="kpi" href="{{ url_for('warehouse.items', scope='all', stock='low') }}"><div class="kpi-label">Заканчиваются</div><div class="kpi-value {{ 'text-danger' if totals.low }}">{{ totals.low }}</div><div class="kpi-note">остаток ≤ минимума</div></a>
+</div>
+
+<div class="type-grid">
+  {% for t in types %}
+  <a class="type-card" href="{{ url_for('warehouse.items', scope=t.id) }}">
+    <div class="type-name">{{ t.name }}</div>
+    <div class="type-count">{{ t.positions }} <span>{{ t.positions|plural('позиция', 'позиции', 'позиций') }}</span></div>
+    <div class="type-meta">
+      <span>по закупке {{ t.cost|money }}</span>
+      {% if t.low %}<span class="badge badge-danger">заканчиваются: {{ t.low }}</span>{% endif %}
+      {% if t.empty %}<span class="badge badge-outline">нет в наличии: {{ t.empty }}</span>{% endif %}
+    </div>
+  </a>
+  {% endfor %}
+  {% if untyped.positions %}
+  <a class="type-card type-card-muted" href="{{ url_for('warehouse.items', scope='none') }}">
+    <div class="type-name">Без типа</div>
+    <div class="type-count">{{ untyped.positions }} <span>{{ untyped.positions|plural('позиция', 'позиции', 'позиций') }}</span></div>
+    <div class="type-meta"><span>Укажите им тип в карточке позиции</span></div>
+  </a>
+  {% endif %}
+  <a class="type-card type-card-all" href="{{ url_for('warehouse.items', scope='all') }}">
+    <div class="type-name">Все позиции</div>
+    <div class="type-count">{{ totals.positions }} <span>{{ totals.positions|plural('позиция', 'позиции', 'позиций') }}</span></div>
+    <div class="type-meta"><span>Общий список с группировкой по типам</span></div>
+  </a>
+</div>
+
+<div class="card" style="margin-top: 18px;">
+  <div class="card-head"><h2>Последнее движение</h2><a class="small" href="{{ url_for('warehouse.movements') }}">Вся история</a></div>
+  {% if recent %}
+  <div class="table-wrap">
+    <table class="table">
+      <tbody>
+      {% for m in recent %}
+        <tr>
+          <td class="nowrap">{{ m.created_at|datetime }}</td>
+          <td><a href="{{ url_for('warehouse.view', part_id=m.part_id) }}">{{ m.part_name }}</a></td>
+          <td>{{ STOCK_KINDS[m.kind] }}{% if m.order_id %} · <a href="{{ url_for('orders.view', order_id=m.order_id) }}">№ {{ m.order_number|order_no(m.order_year) }}</a>{% endif %}</td>
+          <td class="num {{ 'text-success' if m.quantity > 0 else 'text-danger' }}">{{ '+' if m.quantity > 0 }}{{ m.quantity|qty }} {{ m.unit }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">Движений пока не было.</div>
+  {% endif %}
+</div>
+{% endblock %}

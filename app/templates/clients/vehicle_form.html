@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}{{ 'Редактирование техники' if edit else 'Новая техника' }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('clients.index') }}">Клиенты</a> / <a href="{{ url_for('clients.view', client_id=client.id) }}">{{ client.name }}</a></div>
+<div class="page-head"><h1>{{ 'Редактирование техники' if edit else 'Новая техника' }}</h1></div>
+<form method="post" style="max-width: 900px;">
+  {{ csrf() }}
+  <input type="hidden" name="next" value="{{ next_url or '' }}">
+  <div class="card"><div class="card-body">
+    {% set prefix = '' %}
+    {% include "clients/_vehicle_fields.html" %}
+  </div></div>
+  <div class="form-actions">
+    <button class="btn btn-primary">Сохранить</button>
+    <a class="btn btn-ghost" href="{{ url_for('clients.view', client_id=client.id) }}">Отмена</a>
+  </div>
+</form>
+{% endblock %}

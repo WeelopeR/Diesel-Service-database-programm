@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Главная{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Главная</h1>
+    <div class="sub">{{ today|date }} · заказ-нарядов в {{ current_year }} году: {{ orders_this_year }}</div>
+  </div>
+  <div class="actions">
+    <a class="btn btn-primary" href="{{ url_for('orders.create') }}">{{ icon('plus') }}Новый заказ-наряд</a>
+    <a class="btn" href="{{ url_for('clients.create') }}">Новый клиент</a>
+  </div>
+</div>
+
+<div class="kpis">
+  <a class="kpi" href="{{ url_for('orders.index') }}">
+    <div class="kpi-label">В работе сейчас</div>
+    <div class="kpi-value">{{ active_total }}</div>
+    <div class="kpi-note">{% if overdue %}<span class="text-danger">просрочено: {{ overdue }}</span>{% else %}заказ-нарядов{% endif %}</div>
+  </a>
+  <a class="kpi" href="{{ url_for('orders.index', status='done') }}">
+    <div class="kpi-label">Готовы к выдаче</div>
+    <div class="kpi-value">{{ status_counts.get('done', 0) }}</div>
+    <div class="kpi-note">ждут клиента</div>
+  </a>
+  <a class="kpi" href="{{ url_for('finance.index') }}">
+    <div class="kpi-label">Доход за {{ month_start.strftime('%m.%Y') }}</div>
+    <div class="kpi-value text-success">{{ income|money }}</div>
+    <div class="kpi-note">расход {{ expense|money }}</div>
+  </a>
+  <a class="kpi" href="{{ url_for('finance.report') }}">
+    <div class="kpi-label">Прибыль за месяц</div>
+    <div class="kpi-value {{ 'text-danger' if profit < 0 }}">{{ profit|money }}</div>
+    <div class="kpi-note">выполнено работ на {{ completed_revenue|money }}</div>
+  </a>
+  <a class="kpi" href="{{ url_for('orders.index', payment='debt', status='all') }}">
+    <div class="kpi-label">Долги клиентов</div>
+    <div class="kpi-value {{ 'text-danger' if debts_total > 0 }}">{{ debts_total|money }}</div>
+    <div class="kpi-note">{{ debts|length }} выданных без полной оплаты</div>
+  </a>
+</div>
+
+<div class="grid grid-main">
+  <div class="card">
+    <div class="card-head">
+      <h2>Заказ-наряды в работе</h2>
+      <div class="pills">
+        {% for st in ['new', 'diagnostics', 'in_progress', 'waiting_parts', 'done'] %}
+        <a class="pill" href="{{ url_for('orders.index', status=st) }}">{{ ORDER_STATUSES[st] }}<span class="count">{{ status_counts.get(st, 0) }}</span></a>
+        {% endfor %}
+      </div>
+    </div>
+    {% if active_orders %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>№</th><th>Клиент</th><th>Техника</th><th>Статус</th><th class="hide-sm">Срок</th><th class="num">Сумма</th></tr></thead>
+        <tbody>
+        {% for o in active_orders %}
+          <tr data-href="{{ url_for('orders.view', order_id=o.id) }}">
+            <td><a class="strong" href="{{ url_for('orders.view', order_id=o.id) }}">{{ o|order_no }}</a></td>
+            <td>{{ o.client_name }}<div class="muted small">{{ o.client_phone or '' }}</div></td>
+            <td>{{ o|vehicle if o.make or o.model or o.plate else '—' }}</td>
+            <td>{{ status_badge(o.status) }}</td>
+            <td class="hide-sm nowrap {{ 'text-danger' if o.planned_date and o.planned_date < today and o.status != 'done' }}">{{ o.planned_date|date or '—' }}</td>
+            <td class="num">{{ o.total|money }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">Сейчас нет заказ-нарядов в работе.</div>
+    {% endif %}
+  </div>
+
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>Заканчивается на складе</h2><a class="small" href="{{ url_for('warehouse.items', scope='all', stock='low') }}">Все</a></div>
+      {% if low_stock %}
+      <table class="table">
+        <tbody>
+        {% for p in low_stock %}
+          <tr data-href="{{ url_for('warehouse.view', part_id=p.id) }}">
+            <td>{{ p.name }}<div class="muted small">{{ p.sku or '' }}</div></td>
+            <td class="num"><span class="badge badge-danger">{{ p.quantity|qty }} {{ p.unit }}</span><div class="muted small">мин. {{ p.min_quantity|qty }}</div></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">Все позиции в достатке.</div>
+      {% endif %}
+    </div>
+
+    {% if debts %}
+    <div class="card">
+      <div class="card-head"><h2>Долги клиентов</h2><a class="small" href="{{ url_for('orders.index', payment='debt', status='all') }}">Все</a></div>
+      <table class="table">
+        <tbody>
+        {% for d in debts[:8] %}
+          <tr data-href="{{ url_for('orders.view', order_id=d.id) }}">
+            <td><a href="{{ url_for('orders.view', order_id=d.id) }}">№ {{ d|order_no }}</a><div class="muted small">{{ d.client_name }}</div></td>
+            <td class="num text-danger">{{ d.due|money }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

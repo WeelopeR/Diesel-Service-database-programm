@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Зарплата{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Зарплата мастеров</h1><div class="sub">Начисление = сумма работ × процент мастера. Учитываются заказ-наряды со статусом «Готов» или «Выдан» по дате выполнения.</div></div>
+</div>
+{{ period_filter('salary.index', start, end, presets) }}
+<div class="kpis">
+  <div class="kpi"><div class="kpi-label">Выполнено работ на сумму</div><div class="kpi-value">{{ totals.revenue|money }}</div><div class="kpi-note">{{ totals.works }} работ за период</div></div>
+  <div class="kpi"><div class="kpi-label">Начислено за период</div><div class="kpi-value">{{ totals.accrued|money }}</div></div>
+  <div class="kpi"><div class="kpi-label">Выплачено за период</div><div class="kpi-value">{{ totals.paid|money }}</div></div>
+  <div class="kpi"><div class="kpi-label">Остаток к выплате (всего)</div><div class="kpi-value {{ 'text-danger' if totals.balance > 0 }}">{{ totals.balance|money }}</div></div>
+</div>
+<div class="card">
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Мастер</th><th class="num">Работ</th><th class="num hide-sm">Заказов</th><th class="num">Сумма работ</th><th class="num">Начислено</th><th class="num">Выплачено</th><th class="num">К выплате</th><th></th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr data-href="{{ url_for('salary.detail', employee_id=r.employee.id, start=start.isoformat(), end=end.isoformat()) }}" class="{{ 'row-muted' if not r.employee.is_active }}">
+          <td><a class="strong" href="{{ url_for('salary.detail', employee_id=r.employee.id, start=start.isoformat(), end=end.isoformat()) }}">{{ r.employee.full_name }}</a><div class="muted small">{{ r.employee.position or 'Мастер' }}</div></td>
+          <td class="num">{{ r.works }}</td>
+          <td class="num hide-sm">{{ r.orders }}</td>
+          <td class="num">{{ r.revenue|money }}</td>
+          <td class="num strong">{{ r.accrued|money }}</td>
+          <td class="num">{{ r.paid|money }}</td>
+          <td class="num strong {{ 'text-danger' if r.balance > 0 }}">{{ r.balance|money }}</td>
+          <td class="actions-cell"><a class="btn btn-sm" href="{{ url_for('salary.detail', employee_id=r.employee.id, start=start.isoformat(), end=end.isoformat()) }}#pay">Выплатить</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+      <tfoot><tr><td>Итого</td><td class="num">{{ totals.works }}</td><td class="hide-sm"></td><td class="num">{{ totals.revenue|money }}</td><td class="num">{{ totals.accrued|money }}</td><td class="num">{{ totals.paid|money }}</td><td class="num">{{ totals.balance|money }}</td><td></td></tr></tfoot>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">Мастеров пока нет. Добавьте их в разделе <a href="{{ url_for('employees.index') }}">Мастера</a>.</div>
+  {% endif %}
+</div>
+<p class="muted small">«К выплате» — всё начисленное за всё время минус все выплаты мастеру. Выплаты и авансы записываются как расходы с указанием мастера.</p>
+{% endblock %}

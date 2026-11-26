@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Новый заказ-наряд{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('orders.index') }}">Заказ-наряды</a></div>
+<div class="page-head">
+  <div><h1>Новый заказ-наряд</h1><div class="sub">Шаг 1 из 2 — выберите клиента</div></div>
+  <div class="actions"><a class="btn btn-primary" href="{{ url_for('clients.create', next='order') }}">{{ icon('plus') }}Новый клиент</a></div>
+</div>
+<form class="toolbar" method="get">
+  <input class="search" type="search" name="q" value="{{ q }}" placeholder="Имя, телефон, ИНН, госномер или VIN" autofocus>
+  <button class="btn">Найти</button>
+</form>
+<div class="card">
+  <div class="card-head"><h2>{{ 'Найдено' if q else 'Недавние клиенты' }}</h2></div>
+  {% if clients %}
+  <div class="table-wrap">
+    <table class="table">
+      <tbody>
+      {% for c in clients %}
+        <tr data-href="{{ url_for('orders.create', client_id=c.id) }}">
+          <td><a class="strong" href="{{ url_for('orders.create', client_id=c.id) }}">{{ c.name }}</a><div class="muted small">{{ c.phone or '' }}</div></td>
+          <td class="hide-sm">{{ c.vehicles or '' }}</td>
+          <td class="actions-cell"><a class="btn btn-sm" href="{{ url_for('orders.create', client_id=c.id) }}">Выбрать</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">{% if q %}Клиент не найден. <a href="{{ url_for('clients.create', next='order') }}">Добавить нового клиента</a>.{% else %}Клиентов пока нет — <a href="{{ url_for('clients.create', next='order') }}">добавьте первого</a>.{% endif %}</div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% set p = prefix or '' %}
+{% set vehicle = vehicle or {} %}
+<div class="form-grid form-grid-3">
+  <div class="field"><label for="{{ p }}make">Марка</label><input type="text" id="{{ p }}make" name="{{ p }}make" value="{{ vehicle.make or '' }}" placeholder="КАМАЗ, MAN, John Deere…"></div>
+  <div class="field"><label for="{{ p }}model">Модель</label><input type="text" id="{{ p }}model" name="{{ p }}model" value="{{ vehicle.model or '' }}"></div>
+  <div class="field"><label for="{{ p }}year">Год выпуска</label><input type="number" id="{{ p }}year" name="{{ p }}year" value="{{ vehicle.year or '' }}" min="1950" max="2100"></div>
+  <div class="field"><label for="{{ p }}plate">Госномер</label><input type="text" id="{{ p }}plate" name="{{ p }}plate" value="{{ vehicle.plate or '' }}" style="text-transform: uppercase;"></div>
+  <div class="field"><label for="{{ p }}vin">VIN / номер рамы</label><input type="text" id="{{ p }}vin" name="{{ p }}vin" value="{{ vehicle.vin or '' }}" style="text-transform: uppercase;"></div>
+  <div class="field"><label for="{{ p }}engine">Двигатель</label><input type="text" id="{{ p }}engine" name="{{ p }}engine" value="{{ vehicle.engine or '' }}" placeholder="модель, объём"></div>
+  <div class="field full"><label for="{{ p }}fuel_system">Топливная аппаратура</label><input type="text" id="{{ p }}fuel_system" name="{{ p }}fuel_system" value="{{ vehicle.fuel_system or '' }}" placeholder="Common Rail Bosch, номера форсунок, ТНВД…"></div>
+  <div class="field full"><label for="{{ p }}notes">Примечание</label><input type="text" id="{{ p }}notes" name="{{ p }}notes" value="{{ vehicle.notes or '' }}"></div>
+</div>

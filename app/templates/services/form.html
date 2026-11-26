@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}{{ 'Редактирование услуги' if edit else 'Новая услуга' }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('services.index') }}">Услуги</a></div>
+<div class="page-head"><h1>{{ 'Редактирование услуги' if edit else 'Новая услуга' }}</h1></div>
+<form method="post" class="card" style="max-width: 760px;">
+  {{ csrf() }}
+  <div class="card-body">
+    <div class="form-grid">
+      <div class="field full"><label for="name">Название *</label><input type="text" id="name" name="name" value="{{ service.name or '' }}" required autofocus placeholder="Например: Диагностика форсунки Common Rail на стенде"></div>
+      <div class="field full">
+        <label for="category">Категория</label>
+        <input type="text" id="category" name="category" value="{{ service.category or '' }}" list="categories" placeholder="Форсунки, ТНВД, Диагностика…">
+        <datalist id="categories">{% for c in categories %}<option value="{{ c }}">{% endfor %}</datalist>
+      </div>
+      <div class="field"><label for="price">Цена, ₽</label><input type="text" inputmode="decimal" id="price" name="price" value="{{ service.price|num }}"></div>
+      <div class="field">
+        <label for="master_percent">Процент мастеру, %</label>
+        <input type="text" inputmode="decimal" id="master_percent" name="master_percent" value="{{ service.master_percent|num }}">
+        <div class="hint" id="master-share"></div>
+      </div>
+      <div class="field full"><label for="notes">Описание</label><textarea id="notes" name="notes" rows="2">{{ service.notes or '' }}</textarea></div>
+      <div class="field full"><label class="check"><input type="checkbox" name="is_active" value="1" {{ 'checked' if service.is_active }}>Услуга действует (показывается при оформлении заказ-наряда)</label></div>
+    </div>
+  </div>
+  <div class="card-foot form-actions" style="margin-top: 0;">
+    <button class="btn btn-primary">Сохранить</button>
+    {% if not edit %}<button class="btn" name="add_more" value="1">Сохранить и добавить ещё</button>{% endif %}
+    <a class="btn btn-ghost" href="{{ url_for('services.index') }}">Отмена</a>
+  </div>
+</form>
+<script>
+(function () {
+  var price = document.getElementById("price"), pct = document.getElementById("master_percent"), out = document.getElementById("master-share");
+  function n(v) { v = parseFloat(String(v).replace(",", ".").replace(/\s/g, "")); return isNaN(v) ? 0 : v; }
+  function upd() { var s = n(price.value) * n(pct.value) / 100; out.textContent = s ? "Мастеру с одной услуги: " + s.toLocaleString("ru-RU", {maximumFractionDigits: 2}) + " ₽" : ""; }
+  price.addEventListener("input", upd); pct.addEventListener("input", upd); upd();
+})();
+</script>
+{% endblock %}
