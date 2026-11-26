@@ -1,0 +1,10 @@
+[Unit]
+Description=Дизель Сервис (%i): резервная копия базы
+
+[Service]
+Type=oneshot
+User=diesel
+Group=diesel
+EnvironmentFile=/etc/diesel/%i.env
+WorkingDirectory=/opt/diesel/%i
+ExecStart=/opt/diesel/%i/.venv/bin/python run.py --backup ${BACKUP_DIR} --keep 30

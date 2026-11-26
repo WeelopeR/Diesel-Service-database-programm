@@ -1,0 +1,23 @@
+[Unit]
+Description=Дизель Сервис (%i)
+After=network.target
+
+[Service]
+Type=simple
+User=diesel
+Group=diesel
+EnvironmentFile=/etc/diesel/%i.env
+WorkingDirectory=/opt/diesel/%i
+# Программа слушает только этот компьютер; снаружи она доступна через Caddy (HTTPS).
+ExecStart=/opt/diesel/%i/.venv/bin/python run.py --host 127.0.0.1 --port ${PORT}
+Restart=on-failure
+RestartSec=5
+# Защита: писать программа может только в свою папку данных и копий.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/diesel/%i /var/backups/diesel/%i
+
+[Install]
+WantedBy=multi-user.target

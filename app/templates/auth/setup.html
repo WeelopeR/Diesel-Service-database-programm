@@ -2,6 +2,19 @@
 {% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
 {% block title %}Первый запуск{% endblock %}
 {% block content %}
+{% if remote %}
+<div class="card">
+  <div class="card-body stack">
+    <h1>Первый запуск</h1>
+    <p>Пароль для входа ещё не задан. Задать его можно только на компьютере, где запущена программа:</p>
+    <ul style="margin: 0; padding-left: 20px;">
+      <li>откройте программу в браузере на этом компьютере;</li>
+      <li>или выполните там команду <code>start.bat --set-password</code> (на сервере — <code>run.py --set-password</code>).</li>
+    </ul>
+    <p class="muted small" style="margin: 0;">Так посторонний не сможет задать пароль раньше вас.</p>
+  </div>
+</div>
+{% else %}
 <form class="card" method="post">
   {{ csrf() }}
   <div class="card-body stack">
@@ -22,4 +35,5 @@
     <button class="btn btn-primary" style="width: 100%;">Сохранить и войти</button>
   </div>
 </form>
+{% endif %}
 {% endblock %}

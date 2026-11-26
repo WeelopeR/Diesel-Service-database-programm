@@ -1,2 +1,4 @@
 start.bat text eol=crlf
 *.sh text eol=lf
+deploy/*.sh text eol=lf
+deploy/systemd/* text eol=lf
