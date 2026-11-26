@@ -86,6 +86,11 @@ def _register_failure(key):
     _failed_logins[key] = (count + 1, first)
 
 
+def is_local_request():
+    """Запрос с того же компьютера, где запущена программа."""
+    return (request.remote_addr or "") in ("127.0.0.1", "::1")
+
+
 def _start_session(password_hash):
     session.clear()
     session.permanent = True
@@ -140,6 +145,12 @@ def setup():
     """Первый запуск: руководитель придумывает пароль для входа."""
     if password_is_set():
         return redirect(url_for("auth.login"))
+    # Первый пароль задаётся только с компьютера, где запущена программа: иначе на
+    # сервере в интернете его успел бы задать посторонний.
+    if not is_local_request():
+        if request.method == "POST":
+            abort(403)
+        return render_template("auth/setup.html", remote=True)
     error = None
     if request.method == "POST":
         password = request.form.get("password", "")

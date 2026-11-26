@@ -534,6 +534,80 @@ def test_help_is_private_and_readme_is_clean(app, admin):
         assert secret not in readme, secret
 
 
+# ---------- Работа на сервере ----------
+
+def test_first_password_only_from_this_computer(tmp_path):
+    app = create_app({"DATA_DIR": str(tmp_path), "TESTING": True})
+    outsider = app.test_client()
+    outsider.environ_base["REMOTE_ADDR"] = "203.0.113.5"
+    page = text(outsider.get("/setup"))
+    assert "только на компьютере, где запущена программа" in page and 'name="password"' not in page
+    assert outsider.post("/setup", data={"password": "hacker-pass", "password2": "hacker-pass"}) \
+        .status_code in (400, 403)
+    with app.app_context():
+        assert not auth.password_is_set()
+    local = app.test_client()                     # тот же компьютер — форма доступна
+    assert 'name="password"' in text(local.get("/setup"))
+
+
+def test_security_headers(admin):
+    response = admin.get("/login")
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_waitress_trusts_only_local_proxy(tmp_path, monkeypatch):
+    """За Caddy адрес посетителя берётся из X-Forwarded-For (только от 127.0.0.1)."""
+    import threading
+    import urllib.request
+    from waitress.server import create_server
+    import run
+
+    app = create_app({"DATA_DIR": str(tmp_path), "TESTING": True})
+
+    def fetch_setup(options):
+        server = create_server(app, **{**options, "port": 0})
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.effective_port}/setup",
+                headers={"X-Forwarded-For": "203.0.113.5"})
+            with urllib.request.urlopen(request) as response:
+                return response.read().decode()
+        finally:
+            server.close()
+
+    monkeypatch.setenv("DIESEL_PROXY", "1")
+    behind_proxy = fetch_setup(run.server_options("127.0.0.1", 0))
+    assert "только на компьютере" in behind_proxy        # посетитель из интернета
+
+    monkeypatch.delenv("DIESEL_PROXY")
+    options = run.server_options("127.0.0.1", 0)
+    assert "trusted_proxy" not in options                # дома прокси не доверяем
+    assert 'name="password"' in fetch_setup(options)
+
+
+def test_backup_command(tmp_path, monkeypatch, capsys):
+    import run
+    data = tmp_path / "data"
+    monkeypatch.setenv("DIESEL_DATA_DIR", str(data))
+    run.backup(tmp_path / "copies", keep=2)                 # базы ещё нет — не падает
+    assert "копировать нечего" in capsys.readouterr().out
+    create_app({"DATA_DIR": str(data), "TESTING": True})
+    names = []
+    for i in range(3):
+        target = tmp_path / "copies" / f"diesel_service_2020-01-0{i + 1}_00-00-00.db"
+        target.parent.mkdir(exist_ok=True)
+        target.write_bytes(b"old")
+        names.append(target.name)
+    run.backup(tmp_path / "copies", keep=2)
+    copies = sorted(x.name for x in (tmp_path / "copies").glob("diesel_service_*.db"))
+    assert len(copies) == 2 and names[0] not in copies and names[1] not in copies
+    newest = tmp_path / "copies" / copies[-1]
+    assert newest.read_bytes()[:15] == b"SQLite format 3"
+
+
 def test_default_name(admin):
     assert "Дизель Сервис" in text(admin.get("/"))
 

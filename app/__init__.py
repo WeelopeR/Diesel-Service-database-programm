@@ -26,10 +26,15 @@ def _load_secret_key(data_dir):
     return key
 
 
+def default_data_dir():
+    """Папка с базой: DIESEL_DATA_DIR или data рядом с программой."""
+    return Path(os.environ.get("DIESEL_DATA_DIR", BASE_DIR / "data"))
+
+
 def create_app(test_config=None):
     app = Flask(__name__)
 
-    data_dir = Path(os.environ.get("DIESEL_DATA_DIR", BASE_DIR / "data"))
+    data_dir = default_data_dir()
     if test_config and "DATA_DIR" in test_config:
         data_dir = Path(test_config["DATA_DIR"])
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -50,6 +55,15 @@ def create_app(test_config=None):
     db.init_db(app.config["DATABASE"])
     app.teardown_appcontext(db.close_db)
     app.before_request(auth.before_request)
+
+    @app.after_request
+    def security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        if app.config["SESSION_COOKIE_SECURE"]:
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+        return response
 
     from .views import (
         clients, dashboard, employees, finance, orders, salary, services, settings, warehouse,
