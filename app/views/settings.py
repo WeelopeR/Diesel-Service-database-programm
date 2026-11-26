@@ -12,8 +12,7 @@ from .. import db
 
 bp = Blueprint("settings", __name__, url_prefix="/settings")
 
-FIELDS = ("company_name", "company_address", "company_phone", "company_requisites",
-          "order_footer")
+FIELDS = ("company_name", "company_address", "company_phone", "company_requisites")
 
 
 @bp.route("/", methods=["GET", "POST"])

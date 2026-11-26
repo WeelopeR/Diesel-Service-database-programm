@@ -231,6 +231,25 @@ def test_full_order_flow(app, admin):
     assert "ЗАКАЗ-НАРЯД № 1<" in printed and "Ремонт форсунки CR" in printed
 
 
+def test_print_form_without_warranty_and_with_overpayment(app, admin):
+    ctx = create_full_order(app, admin)            # итого 26 000 ₽
+    view = ctx["view"]
+    printed = text(admin.get(f"{view}/print"))
+    assert "Гарантия" not in printed and "гарант" not in printed.lower()
+    assert "Задолженности нет" not in printed
+
+    post(admin, f"{view}/payments/add", {"amount": "10000"}, form_url=view)
+    printed = text(admin.get(f"{view}/print"))
+    assert "Остаток к оплате" in printed and "16\u00a0000\u00a0₽" in printed
+    post(admin, f"{view}/payments/add", {"amount": "20000"}, form_url=view)
+    printed = text(admin.get(f"{view}/print"))
+    assert "Переплата" in printed and "4\u00a0000\u00a0₽" in printed
+
+    # Сохранение настроек не стирает сохранённый текст гарантии (пригодится для кнопки)
+    post(admin, "/settings/", {"company_name": "Дизель Сервис"})
+    assert "Гарантия" in scalar(app, "SELECT value FROM settings WHERE key = 'order_footer'")
+
+
 def test_cancel_returns_parts(app, admin):
     ctx = create_full_order(app, admin)
     post(admin, f"{ctx['view']}/status", {"status": "cancelled"}, form_url=ctx["view"])
