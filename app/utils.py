@@ -235,16 +235,20 @@ def fmt_order_no(value, year=None):
     return str(number)
 
 
+# Шаг округления цены продажи: всегда вверх до ближайших 50 ₽.
+PRICE_STEP = 50
+
+
 def price_with_markup(purchase_price, markup_percent):
-    """Цена продажи по наценке: от 100 ₽ — всегда вверх до сотни (1 521 → 1 600),
-    дешевле 100 ₽ — не округляется (только до копеек)."""
+    """Цена продажи по наценке: от 100 ₽ — всегда вверх до 50 ₽
+    (120 → 150, 151 → 200, 1 521 → 1 550), дешевле 100 ₽ — не округляется."""
     # Сначала до копеек, чтобы 1000 × 1,3 = 1300,0000000002 не превратилось в 1400.
     raw = money_round(float(purchase_price or 0) * (1 + float(markup_percent or 0) / 100))
     if raw <= 0:
         return 0.0
     if raw < 100:
         return raw
-    return float(math.ceil(raw / 100) * 100)
+    return float(math.ceil(raw / PRICE_STEP) * PRICE_STEP)
 
 
 def plural(n, one, few, many):

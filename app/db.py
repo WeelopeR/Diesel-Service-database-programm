@@ -19,7 +19,7 @@ DEFAULT_SETTINGS = {
 }
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Типы запчастей, которые создаются при первом запуске (потом их можно менять).
 DEFAULT_PART_CATEGORIES = [
@@ -133,8 +133,9 @@ def _migrate(conn, version):
                          "REFERENCES part_categories (id) ON DELETE SET NULL")
         if "markup_percent" not in columns:
             conn.execute("ALTER TABLE parts ADD COLUMN markup_percent REAL")
-    if version < 3 and _table_exists(conn, "parts") and "markup_percent" in _columns(conn, "parts"):
-        # Новое правило цены: вверх до сотни, дешевле 100 ₽ — без округления.
+    if version < 4 and _table_exists(conn, "parts") and "markup_percent" in _columns(conn, "parts"):
+        # Правило цены изменилось (v3 — вверх до сотни, v4 — вверх до 50 ₽):
+        # пересчитываем цены всех позиций с наценкой.
         from .utils import price_with_markup
         for row in conn.execute("SELECT id, purchase_price, markup_percent FROM parts "
                                 "WHERE markup_percent IS NOT NULL").fetchall():

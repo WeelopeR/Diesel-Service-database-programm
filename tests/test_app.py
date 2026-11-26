@@ -383,9 +383,10 @@ def test_part_categories_seeded_and_editable(app, admin):
 
 
 def test_markup_price_rounding(app, admin):
-    # От 100 ₽ — всегда вверх до сотни; дешевле 100 ₽ — без округления.
-    cases = [("1170", "30", 1600), ("1000", "30", 1300), ("2100", "0", 2100), ("2101", "0", 2200),
-             ("60", "100", 200), ("30", "50", 45), ("33", "30", 42.9), ("76.92", "30", 100)]
+    # От 100 ₽ — всегда вверх до 50 ₽; дешевле 100 ₽ — без округления.
+    cases = [("120", "0", 150), ("150", "0", 150), ("151", "0", 200), ("60", "100", 150),
+             ("1170", "30", 1550), ("1000", "30", 1300), ("2101", "0", 2150), ("2151", "0", 2200),
+             ("30", "50", 45), ("33", "30", 42.9), ("76.92", "30", 100)]
     for i, (purchase, markup, expected) in enumerate(cases):
         part_id = make_part(app, admin, f"Позиция {i}", purchase_price=purchase,
                             markup_percent=markup)
@@ -396,8 +397,8 @@ def test_markup_price_rounding(app, admin):
 
 
 def test_prices_recalculated_after_update(tmp_path):
-    """Цены по наценке, посчитанные прошлой версией (до ближайшей сотни, минимум 100 ₽),
-    пересчитываются по новому правилу при запуске."""
+    """Цены по наценке, посчитанные прошлыми версиями (до ближайшей сотни, минимум 100 ₽;
+    вверх до сотни), пересчитываются по новому правилу при запуске."""
     app = create_app({"DATA_DIR": str(tmp_path), "TESTING": True})
     with app.app_context():
         db.execute("INSERT INTO parts (name, purchase_price, markup_percent, sale_price) "
@@ -407,7 +408,7 @@ def test_prices_recalculated_after_update(tmp_path):
         db.commit()
     app = create_app({"DATA_DIR": str(tmp_path), "TESTING": True})
     prices = {r["name"]: r["sale_price"] for r in query(app, "SELECT name, sale_price FROM parts")}
-    assert prices == {"По наценке": 1600, "Дешёвая": 45, "Вручную": 1555}
+    assert prices == {"По наценке": 1550, "Дешёвая": 45, "Вручную": 1555}
 
 
 def test_warehouse_columns_and_filters(app, admin):
