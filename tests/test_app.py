@@ -250,6 +250,14 @@ def test_print_form_without_warranty_and_with_overpayment(app, admin):
     assert "Гарантия" in scalar(app, "SELECT value FROM settings WHERE key = 'order_footer'")
 
 
+def test_warranty_button(app, admin):
+    ctx = create_full_order(app, admin)
+    assert f'href="{ctx["view"]}/warranty"' in text(admin.get(ctx["view"]))
+    page = text(admin.get(f"{ctx['view']}/warranty"))
+    assert "Шаблон гарантии пока не оформлен" in page
+    assert admin.get("/orders/99999/warranty").status_code == 404
+
+
 def test_cancel_returns_parts(app, admin):
     ctx = create_full_order(app, admin)
     post(admin, f"{ctx['view']}/status", {"status": "cancelled"}, form_url=ctx["view"])
