@@ -51,7 +51,7 @@ p { margin: 0 0 8px; }
 .text-warning { color: var(--warning); }
 
 /* ---------- Каркас ---------- */
-.layout { display: flex; min-height: 100vh; }
+.layout { display: flex; min-height: 100vh; background: linear-gradient(to right, var(--sidebar) 236px, transparent 236px); }
 .sidebar {
   width: 236px;
   flex: 0 0 236px;
@@ -152,6 +152,10 @@ table.table { width: 100%; border-collapse: collapse; }
 .table tbody tr:last-child td { border-bottom: 0; }
 .table tfoot td { font-weight: 650; background: var(--surface-2); border-top: 1px solid var(--border); border-bottom: 0; }
 .table.compact th, .table.compact td { padding: 8px; }
+.table th.num, .table td.num { text-align: right; }
+.table tr.group-row td { background: var(--surface-2); font-weight: 650; border-top: 1px solid var(--border); padding-top: 10px; padding-bottom: 10px; }
+.table tbody tr.group-row:hover { background: none; }
+.table tbody:last-child tr:last-child td { border-bottom: 0; }
 .table .actions-cell { text-align: right; white-space: nowrap; }
 .table tr.row-muted td { color: var(--muted); }
 .table tr.row-link { cursor: pointer; }
@@ -282,7 +286,7 @@ tr.editing td.line-edit { display: table-cell; }
   .line-form .lf-name, .line-form .lf-master { grid-column: 1 / -1; }
 }
 @media (max-width: 900px) {
-  .layout { display: block; }
+  .layout { display: block; background: none; }
   .sidebar {
     position: fixed; inset: 0 auto 0 0; z-index: 50; transform: translateX(-100%);
     transition: transform .2s ease; height: 100%;
