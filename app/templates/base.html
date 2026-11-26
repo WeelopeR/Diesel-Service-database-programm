@@ -26,6 +26,13 @@
       <a href="{{ url_for('clients.index') }}" class="{{ 'active' if endpoint.startswith('clients.') }}">{{ icon('clients') }}Клиенты</a>
       <a href="{{ url_for('services.index') }}" class="{{ 'active' if endpoint.startswith('services.') }}">{{ icon('services') }}Услуги</a>
       <a href="{{ url_for('warehouse.index') }}" class="{{ 'active' if endpoint.startswith('warehouse.') }}">{{ icon('warehouse') }}Склад</a>
+      {% if nav_part_categories %}
+      {% set current_scope = (request.view_args or {}).get('scope', '') %}
+      <div class="nav-sub">
+        {% for c in nav_part_categories %}<a href="{{ url_for('warehouse.items', scope=c.id) }}" class="{{ 'active' if current_scope == c.id|string }}">{{ c.name }}</a>{% endfor %}
+        <a href="{{ url_for('warehouse.items', scope='all') }}" class="{{ 'active' if current_scope == 'all' }}">Все позиции</a>
+      </div>
+      {% endif %}
       <div class="nav-label">Бухгалтерия</div>
       <a href="{{ url_for('finance.index') }}" class="{{ 'active' if endpoint.startswith('finance.') }}">{{ icon('finance') }}Доходы и расходы</a>
       <a href="{{ url_for('salary.index') }}" class="{{ 'active' if endpoint.startswith('salary.') }}">{{ icon('salary') }}Зарплата</a>

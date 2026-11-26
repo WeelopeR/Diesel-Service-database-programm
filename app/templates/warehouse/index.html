@@ -2,142 +2,74 @@
 {% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
 {% block title %}Склад{% endblock %}
 {% block content %}
-{% macro th(col, label, num=False) -%}
-  {%- set active = f.sort == col -%}
-  {%- set next_dir = 'desc' if active and f.dir == 'asc' else 'asc' -%}
-  <th class="sortable {{ 'num' if num }} {{ 'sorted' if active }}"><a href="{{ url_for('warehouse.index', **dict(keep, sort=col, dir=next_dir)) }}" title="Сортировать">{{ label }}<span class="sort-mark">{% if active %}{{ '▲' if f.dir == 'asc' else '▼' }}{% else %}↕{% endif %}</span></a></th>
-{%- endmacro %}
-{% macro range_field(key, label, unit='') -%}
-  <div class="field"><label>{{ label }}</label>
-    <div class="range">
-      <input type="text" inputmode="decimal" name="{{ key }}_min" value="{{ f[key ~ '_min'] }}" placeholder="от" aria-label="{{ label }} от">
-      <input type="text" inputmode="decimal" name="{{ key }}_max" value="{{ f[key ~ '_max'] }}" placeholder="до" aria-label="{{ label }} до">
-    </div>
-  </div>
-{%- endmacro %}
-
 <div class="page-head">
-  <div><h1>Склад</h1><div class="sub">{% if f.start %}Приход и расход — с {{ start|date }} по {{ end|date }}{% elif f.end %}Приход и расход — по {{ end|date }}{% else %}Приход и расход — за всё время{% endif %}, остаток — на {{ end|date }}</div></div>
+  <div><h1>Склад</h1><div class="sub">Выберите тип запчастей — у каждого своя страница с колонками, фильтрами и сортировкой</div></div>
   <div class="actions">
     <a class="btn btn-primary" href="{{ url_for('warehouse.receipt') }}">{{ icon('plus') }}Приход товара</a>
-    <a class="btn" href="{{ url_for('warehouse.create', category_id=f.category if f.category and f.category != 'none' else None) }}">Новая позиция</a>
-    <a class="btn btn-ghost" href="{{ url_for('warehouse.manage_categories') }}">Типы запчастей</a>
+    <a class="btn" href="{{ url_for('warehouse.create') }}">Новая позиция</a>
     <a class="btn btn-ghost" href="{{ url_for('warehouse.movements') }}">Движение</a>
+    <a class="btn btn-ghost" href="{{ url_for('warehouse.manage_categories') }}">Типы запчастей</a>
   </div>
 </div>
 
-<div class="pills category-pills">
-  <a class="pill {{ 'active' if not f.category }}" href="{{ url_for('warehouse.index', **keep_nocat) }}">Все типы<span class="count">{{ category_counts.values()|sum }}</span></a>
-  {% for c in categories %}
-  <a class="pill {{ 'active' if f.category == c.id|string }}" href="{{ url_for('warehouse.index', **dict(keep_nocat, category=c.id)) }}">{{ c.name }}<span class="count">{{ category_counts.get(c.id, 0) }}</span></a>
-  {% endfor %}
-  {% if category_counts.get(None) %}
-  <a class="pill {{ 'active' if f.category == 'none' }}" href="{{ url_for('warehouse.index', **dict(keep_nocat, category='none')) }}">Без типа<span class="count">{{ category_counts.get(None) }}</span></a>
-  {% endif %}
-</div>
-
-<form class="card filters-card" method="get" action="{{ url_for('warehouse.index') }}">
-  {% if f.category %}<input type="hidden" name="category" value="{{ f.category }}">{% endif %}
-  {% if f.sort != 'name' or f.dir != 'asc' %}<input type="hidden" name="sort" value="{{ f.sort }}"><input type="hidden" name="dir" value="{{ f.dir }}">{% endif %}
-  <input type="hidden" name="group" value="0">
-  <div class="filters">
-    <div class="field"><label for="f-sku">Артикул</label><input type="search" id="f-sku" name="sku" value="{{ f.sku }}" placeholder="Можно без пробелов и дефисов"></div>
-    <div class="field wide"><label for="f-name">Наименование</label><input type="search" id="f-name" name="name" value="{{ f.name }}" placeholder="Слова из названия, бренда, применяемости"></div>
-    <div class="field"><label for="f-stock">Наличие</label>
-      <select id="f-stock" name="stock">
-        <option value="">Любое</option>
-        {% for k, v in stock_states.items() %}<option value="{{ k }}" {{ 'selected' if f.stock == k }}>{{ v }}</option>{% endfor %}
-      </select>
-    </div>
-    <div class="field"><label for="f-start">Период с</label><input type="date" id="f-start" name="start" value="{{ f.start }}"></div>
-    <div class="field"><label for="f-end">по</label><input type="date" id="f-end" name="end" value="{{ f.end }}"></div>
-  </div>
-
-  <details class="advanced" {{ 'open' if advanced }}>
-    <summary>Расширенный фильтр: ед. изм., наценка, цена, приход, расход, остаток</summary>
-    <div class="filters">
-      <div class="field"><label for="f-unit">Ед. изм.</label>
-        <select id="f-unit" name="unit">
-          <option value="">Любая</option>
-          {% for u in units %}<option {{ 'selected' if f.unit == u }}>{{ u }}</option>{% endfor %}
-        </select>
-      </div>
-      {{ range_field('markup', 'Наценка, %') }}
-      {{ range_field('price', 'Цена продажи, ₽') }}
-      {{ range_field('in', 'Приход') }}
-      {{ range_field('out', 'Расход') }}
-      {{ range_field('balance', 'Остаток') }}
-    </div>
-  </details>
-
-  <div class="filters-bottom">
-    <div class="filters-actions">
-      <button class="btn btn-primary">{{ icon('search') }}Найти</button>
-      {% if filtered %}<a class="btn btn-ghost" href="{{ url_for('warehouse.index', category=f.category or None) }}">Сбросить</a>{% endif %}
-    </div>
-    <div class="filters-options">
-      <label class="check"><input type="checkbox" name="group" value="1" {{ 'checked' if f.group }}>Группировать по типам</label>
-      <select name="show" class="compact" style="width: auto;" aria-label="Какие позиции показывать">
-        <option value="">Действующие</option>
-        <option value="archived" {{ 'selected' if f.show == 'archived' }}>Архив</option>
-        <option value="all" {{ 'selected' if f.show == 'all' }}>Все позиции</option>
-      </select>
-      <span class="muted small">Период:</span>
-      <a class="pill {{ 'active' if not f.start and not f.end }}" href="{{ url_for('warehouse.index', **dict(keep, start=None, end=None)) }}">Всё время</a>
-      {% for label, s, e in presets[1:] %}
-      <a class="pill {{ 'active' if s == start and e == end }}" href="{{ url_for('warehouse.index', **dict(keep, start=s.isoformat(), end=e.isoformat())) }}">{{ label }}</a>
-      {% endfor %}
-    </div>
-  </div>
+<form class="card filters-card warehouse-search" method="get" action="{{ url_for('warehouse.items', scope='all') }}">
+  <label for="q" class="sr-only">Поиск по всему складу</label>
+  <input type="search" id="q" name="q" placeholder="Поиск по всему складу: артикул или название" autofocus>
+  <button class="btn btn-primary">{{ icon('search') }}Найти</button>
 </form>
 
 <div class="kpis">
-  <div class="kpi"><div class="kpi-label">Позиций</div><div class="kpi-value">{{ totals.positions }}</div></div>
+  <a class="kpi" href="{{ url_for('warehouse.items', scope='all') }}"><div class="kpi-label">Позиций на складе</div><div class="kpi-value">{{ totals.positions }}</div><div class="kpi-note">все типы</div></a>
   <div class="kpi"><div class="kpi-label">Остаток по закупке</div><div class="kpi-value">{{ totals.cost|money }}</div></div>
   <div class="kpi"><div class="kpi-label">Остаток по цене продажи</div><div class="kpi-value">{{ totals.retail|money }}</div></div>
-  <a class="kpi" href="{{ url_for('warehouse.index', **dict(keep, stock='low')) }}"><div class="kpi-label">Заканчиваются</div><div class="kpi-value {{ 'text-danger' if totals.low }}">{{ totals.low or 0 }}</div><div class="kpi-note">остаток ≤ минимума</div></a>
+  <a class="kpi" href="{{ url_for('warehouse.items', scope='all', stock='low') }}"><div class="kpi-label">Заканчиваются</div><div class="kpi-value {{ 'text-danger' if totals.low }}">{{ totals.low }}</div><div class="kpi-note">остаток ≤ минимума</div></a>
 </div>
 
-<div class="card">
-  {% if page.rows %}
+<div class="type-grid">
+  {% for t in types %}
+  <a class="type-card" href="{{ url_for('warehouse.items', scope=t.id) }}">
+    <div class="type-name">{{ t.name }}</div>
+    <div class="type-count">{{ t.positions }} <span>{{ t.positions|plural('позиция', 'позиции', 'позиций') }}</span></div>
+    <div class="type-meta">
+      <span>по закупке {{ t.cost|money }}</span>
+      {% if t.low %}<span class="badge badge-danger">заканчиваются: {{ t.low }}</span>{% endif %}
+      {% if t.empty %}<span class="badge badge-outline">нет в наличии: {{ t.empty }}</span>{% endif %}
+    </div>
+  </a>
+  {% endfor %}
+  {% if untyped.positions %}
+  <a class="type-card type-card-muted" href="{{ url_for('warehouse.items', scope='none') }}">
+    <div class="type-name">Без типа</div>
+    <div class="type-count">{{ untyped.positions }} <span>{{ untyped.positions|plural('позиция', 'позиции', 'позиций') }}</span></div>
+    <div class="type-meta"><span>Укажите им тип в карточке позиции</span></div>
+  </a>
+  {% endif %}
+  <a class="type-card type-card-all" href="{{ url_for('warehouse.items', scope='all') }}">
+    <div class="type-name">Все позиции</div>
+    <div class="type-count">{{ totals.positions }} <span>{{ totals.positions|plural('позиция', 'позиции', 'позиций') }}</span></div>
+    <div class="type-meta"><span>Общий список с группировкой по типам</span></div>
+  </a>
+</div>
+
+<div class="card" style="margin-top: 18px;">
+  <div class="card-head"><h2>Последнее движение</h2><a class="small" href="{{ url_for('warehouse.movements') }}">Вся история</a></div>
+  {% if recent %}
   <div class="table-wrap">
-    <table class="table stock-table">
-      <thead><tr>
-        {{ th('sku', 'Артикул') }}
-        {{ th('name', 'Наименование') }}
-        {{ th('unit', 'Ед. изм.') }}
-        {{ th('markup', 'Наценка', True) }}
-        {{ th('price', 'Цена продажи', True) }}
-        {{ th('in', 'Приход', True) }}
-        {{ th('out', 'Расход', True) }}
-        {{ th('balance', 'Остаток', True) }}
-      </tr></thead>
+    <table class="table">
       <tbody>
-      {% set ns = namespace(cat=-1) %}
-      {% for p in page.rows %}
-        {% if f.group and p.category_id != ns.cat %}
-          {% set ns.cat = p.category_id %}
-          <tr class="group-row"><td colspan="8">{{ p.category_name or 'Без типа' }}</td></tr>
-        {% endif %}
-        {% set low = p.min_quantity and p.quantity <= p.min_quantity %}
-        <tr data-href="{{ url_for('warehouse.view', part_id=p.id) }}" class="{{ 'row-muted' if not p.is_active }}">
-          <td class="nowrap">{{ p.sku or '—' }}</td>
-          <td class="wrap"><a href="{{ url_for('warehouse.view', part_id=p.id) }}" class="strong">{{ p.name }}</a>
-            {%- if p.brand or p.location or (not f.group and p.category_name) %}<div class="muted small">{{ [p.brand, p.location, p.category_name if not f.group else None]|select|join(' · ') }}</div>{% endif %}</td>
-          <td>{{ p.unit }}</td>
-          <td class="num">{% if p.markup_percent is not none %}{{ p.markup_percent|qty }}%{% else %}<span class="muted small">вручную</span>{% endif %}</td>
-          <td class="num strong">{{ p.sale_price|money }}</td>
-          <td class="num">{% if p.incoming %}{{ p.incoming|qty }}{% else %}<span class="muted">—</span>{% endif %}</td>
-          <td class="num">{% if p.outgoing %}{{ p.outgoing|qty }}{% else %}<span class="muted">—</span>{% endif %}</td>
-          <td class="num">{% if low %}<span class="badge badge-danger" title="Минимум {{ p.min_quantity|qty }}">{{ p.balance|qty }}</span>{% elif p.balance <= 0 %}<span class="muted">0</span>{% else %}<strong>{{ p.balance|qty }}</strong>{% endif %}</td>
+      {% for m in recent %}
+        <tr>
+          <td class="nowrap">{{ m.created_at|datetime }}</td>
+          <td><a href="{{ url_for('warehouse.view', part_id=m.part_id) }}">{{ m.part_name }}</a></td>
+          <td>{{ STOCK_KINDS[m.kind] }}{% if m.order_id %} · <a href="{{ url_for('orders.view', order_id=m.order_id) }}">№ {{ m.order_number|order_no(m.order_year) }}</a>{% endif %}</td>
+          <td class="num {{ 'text-success' if m.quantity > 0 else 'text-danger' }}">{{ '+' if m.quantity > 0 }}{{ m.quantity|qty }} {{ m.unit }}</td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
-  {{ pagination(page, 'warehouse.index') }}
   {% else %}
-  <div class="empty">{% if filtered or f.category %}Ничего не найдено. <a href="{{ url_for('warehouse.index') }}">Сбросить фильтры</a>{% else %}Склад пуст. <a href="{{ url_for('warehouse.create') }}">Добавьте первую позицию</a>.{% endif %}</div>
+  <div class="empty">Движений пока не было.</div>
   {% endif %}
 </div>
 {% endblock %}

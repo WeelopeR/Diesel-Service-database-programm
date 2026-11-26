@@ -32,7 +32,7 @@
 {% if page.pages > 1 %}
 <div class="pagination">
   <span class="muted small">Стр. {{ page.page }} из {{ page.pages }} · всего {{ page.total }}</span>
-  {% set args = request.args.to_dict() %}
+  {% set args = dict(request.view_args or {}, **request.args.to_dict()) %}
   {% if page.has_prev %}{% set _ = args.update(page=page.page - 1) %}<a class="btn btn-sm" href="{{ url_for(endpoint, **args) }}">← Назад</a>{% endif %}
   {% if page.has_next %}{% set _ = args.update(page=page.page + 1) %}<a class="btn btn-sm" href="{{ url_for(endpoint, **args) }}">Вперёд →</a>{% endif %}
 </div>

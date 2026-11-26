@@ -243,6 +243,16 @@ def price_with_markup(purchase_price, markup_percent):
     return float(max(100, math.floor(raw / 100 + 0.5) * 100))
 
 
+def plural(n, one, few, many):
+    """Склонение по числу: 1 позиция, 2 позиции, 5 позиций."""
+    n = abs(int(n or 0))
+    if n % 10 == 1 and n % 100 != 11:
+        return one
+    if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14):
+        return few
+    return many
+
+
 def like(text):
     """Параметр для поиска через LOWER_RU(...) LIKE ? без учёта регистра."""
     return f"%{text.strip().lower()}%"

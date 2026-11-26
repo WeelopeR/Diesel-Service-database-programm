@@ -6,7 +6,7 @@ import secrets
 from datetime import timedelta
 from pathlib import Path
 
-from flask import Flask, g, render_template
+from flask import Flask, g, render_template, request
 
 from . import auth, db, utils
 
@@ -68,6 +68,7 @@ def create_app(test_config=None):
         datetime=utils.fmt_datetime,
         order_no=utils.fmt_order_no,
         vehicle=utils.vehicle_title,
+        plural=utils.plural,
     )
 
     @app.context_processor
@@ -83,7 +84,14 @@ def create_app(test_config=None):
             "company_name": _company_name(),
             "today_iso": utils.today_str(),
             "current_year": utils.current_year(),
+            "nav_part_categories": _nav_part_categories(),
         }
+
+    def _nav_part_categories():
+        # Подменю типов запчастей показывается только в разделе «Склад».
+        if not (request.endpoint or "").startswith("warehouse.") or not g.get("logged_in"):
+            return []
+        return db.query("SELECT id, name FROM part_categories ORDER BY position, name")
 
     def _company_name():
         try:

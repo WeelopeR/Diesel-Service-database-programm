@@ -18,7 +18,7 @@
               <button class="btn btn-sm btn-ghost">Сохранить</button>
             </form>
           </td>
-          <td class="num"><a href="{{ url_for('warehouse.index', category=c.id) }}">{{ c.parts }}</a></td>
+          <td class="num"><a href="{{ url_for('warehouse.items', scope=c.id) }}">{{ c.parts }}</a></td>
           <td class="actions-cell">
             <form class="inline" method="post">{{ csrf() }}<input type="hidden" name="action" value="up"><input type="hidden" name="id" value="{{ c.id }}"><button class="btn btn-sm btn-ghost btn-icon" title="Выше" {{ 'disabled' if loop.first }}>▲</button></form>
             <form class="inline" method="post">{{ csrf() }}<input type="hidden" name="action" value="down"><input type="hidden" name="id" value="{{ c.id }}"><button class="btn btn-sm btn-ghost btn-icon" title="Ниже" {{ 'disabled' if loop.last }}>▼</button></form>
@@ -27,7 +27,7 @@
         </tr>
       {% endfor %}
       {% if without %}
-        <tr class="row-muted"><td>Без типа</td><td class="num"><a href="{{ url_for('warehouse.index', category='none') }}">{{ without }}</a></td><td></td></tr>
+        <tr class="row-muted"><td>Без типа</td><td class="num"><a href="{{ url_for('warehouse.items', scope='none') }}">{{ without }}</a></td><td></td></tr>
       {% endif %}
       </tbody>
     </table>

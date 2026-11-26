@@ -415,7 +415,12 @@ def test_warehouse_columns_and_filters(app, admin):
         html = text(admin.get(url))
         return [int(x) for x in re.findall(r'data-href="/warehouse/(\d+)"', html)], html
 
-    ids, html = found("/warehouse/")
+    # Обзор: карточка на каждый тип со своими цифрами
+    overview = text(admin.get("/warehouse/"))
+    assert "Готовые форсунки на продажу" in overview and "1 <span>позиция</span>" in overview
+    assert "заканчиваются: 1" in overview
+
+    ids, html = found("/warehouse/list/all")
     assert set(ids) == {nozzle, filter_, oil}
     for header in ("Артикул", "Наименование", "Ед. изм.", "Наценка", "Цена продажи", "Приход",
                    "Расход", "Остаток"):
@@ -426,22 +431,42 @@ def test_warehouse_columns_and_filters(app, admin):
         return set(found(url)[0])
 
     cat = scalar(app, "SELECT id FROM part_categories WHERE name = 'Фильтра'")
-    assert ids_of(f"/warehouse/?category={cat}") == {filter_}
-    assert ids_of("/warehouse/?sku=0445110") == {nozzle}          # артикул без пробелов
-    assert ids_of("/warehouse/?name=bosch форсунка") == {nozzle}   # все слова, любой порядок
-    assert ids_of("/warehouse/?unit=л") == {oil}
-    assert ids_of("/warehouse/?markup_min=30&markup_max=45") == {oil}
-    assert ids_of("/warehouse/?price_min=10000") == {nozzle}
-    assert ids_of("/warehouse/?out_min=1") == {filter_, oil}
-    assert ids_of("/warehouse/?balance_max=3") == {filter_}          # 10 − 7 = 3
-    assert ids_of("/warehouse/?stock=low") == {filter_}
+    assert ids_of(f"/warehouse/list/{cat}") == {filter_}          # отдельная страница типа
+    assert "Фильтр топливный Mann" in text(admin.get(f"/warehouse/list/{cat}"))
+    assert ids_of(f"/warehouse/list/{cat}?name=масло") == set()   # фильтр внутри типа
+    assert admin.get("/warehouse/list/99999").status_code == 404
+    old_link = admin.get(f"/warehouse/?category={cat}&show=low")
+    assert old_link.status_code == 302 and f"/warehouse/list/{cat}" in old_link.headers["Location"]
+
+    assert ids_of("/warehouse/list/all?q=0445110") == {nozzle}     # быстрый поиск: артикул
+    assert ids_of("/warehouse/list/all?q=масло") == {oil}          # быстрый поиск: название
+    assert ids_of("/warehouse/list/all?sku=0445110") == {nozzle}   # артикул без пробелов
+    assert ids_of("/warehouse/list/all?name=bosch форсунка") == {nozzle}
+    assert ids_of("/warehouse/list/all?unit=л") == {oil}
+    assert ids_of("/warehouse/list/all?markup_min=30&markup_max=45") == {oil}
+    assert ids_of("/warehouse/list/all?price_min=10000") == {nozzle}
+    assert ids_of("/warehouse/list/all?out_min=1") == {filter_, oil}
+    assert ids_of("/warehouse/list/all?balance_max=3") == {filter_}   # 10 − 7 = 3
+    assert ids_of("/warehouse/list/all?stock=low") == {filter_}
     # Период: списание масла было только в январе 2020
-    assert ids_of("/warehouse/?start=2020-01-01&end=2020-12-31&stock=moved") == {oil}
-    assert ids_of("/warehouse/?start=2020-01-01&end=2020-12-31&out_min=2&out_max=2") == {oil}
+    assert ids_of("/warehouse/list/all?start=2020-01-01&end=2020-12-31&stock=moved") == {oil}
+    assert ids_of("/warehouse/list/all?start=2020-01-01&end=2020-12-31&out_min=2&out_max=2") \
+        == {oil}
     # Остаток на конец периода: на 31.01.2020 масла ещё не было (приход позже)
-    assert ids_of("/warehouse/?end=2020-01-31&balance_min=1") == set()
+    assert ids_of("/warehouse/list/all?end=2020-01-31&balance_min=1") == set()
     # Сортировка по остатку по убыванию, без группировки
-    assert found("/warehouse/?sort=balance&dir=desc&group=0")[0] == [oil, nozzle, filter_]
+    assert found("/warehouse/list/all?sort=balance&dir=desc&group=0")[0] == [oil, nozzle, filter_]
+
+
+def test_warehouse_pagination_keeps_type(app, admin):
+    cat = scalar(app, "SELECT id FROM part_categories WHERE name = 'Расходные материалы'")
+    with app.app_context():
+        for i in range(105):
+            db.execute("INSERT INTO parts (name, category_id) VALUES (?, ?)", (f"Кольцо {i:03d}", cat))
+        db.commit()
+    html = text(admin.get(f"/warehouse/list/{cat}"))
+    assert f'href="/warehouse/list/{cat}?page=2"' in html
+    assert "Кольцо 104" in text(admin.get(f"/warehouse/list/{cat}?page=2"))
 
 
 # ---------- Прочее ----------
@@ -509,8 +534,9 @@ def test_all_pages_render(app, admin):
         f"/orders/new?client_id={ctx['client_id']}", ctx["view"], f"{ctx['view']}/edit",
         f"{ctx['view']}/print", "/clients/", "/clients/?q=А123&debt=1&sort=recent",
         f"/clients/{ctx['client_id']}", "/clients/new", "/services/", "/services/new",
-        "/warehouse/", "/warehouse/?show=low", "/warehouse/?stock=idle&sort=markup&dir=desc",
-        "/warehouse/?group=0&group=1&category=none", "/warehouse/categories",
+        "/warehouse/", "/warehouse/list/all", "/warehouse/list/all?stock=idle&sort=markup&dir=desc",
+        "/warehouse/list/all?group=0&group=1", "/warehouse/list/none", "/warehouse/list/1",
+        "/warehouse/categories",
         "/warehouse/new", "/warehouse/receipt",
         f"/warehouse/{ctx['part_id']}", f"/warehouse/{ctx['part_id']}/writeoff",
         "/warehouse/movements", "/finance/", "/finance/new", "/finance/report",

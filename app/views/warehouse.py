@@ -45,7 +45,7 @@ STOCK_STATES = {
 RANGE_FIELDS = ("markup", "price", "in", "out", "balance")
 RANGE_COLUMNS = {"markup": "markup_percent", "price": "sale_price", "in": "incoming",
                  "out": "outgoing", "balance": "balance"}
-FILTER_KEYS = ("sku", "name", "category", "unit", "stock", "show", "start", "end",
+FILTER_KEYS = ("q", "sku", "name", "unit", "stock", "show", "start", "end",
                *[f"{k}_{b}" for k in RANGE_FIELDS for b in ("min", "max")])
 
 
@@ -113,15 +113,26 @@ def normalize_sku(text):
     return re.sub(r"[\s\-./]", "", text.lower())
 
 
-def build_stock_query(args):
-    """Склад с приходом/расходом за период и остатком на конец периода."""
+def get_scope(scope):
+    """Страница склада: тип запчастей (по id), «none» — без типа, «all» — все позиции."""
+    if scope == "all":
+        return {"key": "all", "id": None, "title": "Все позиции"}
+    if scope == "none":
+        return {"key": "none", "id": None, "title": "Без типа"}
+    category = db.query("SELECT * FROM part_categories WHERE id = ?", (to_int(scope),), one=True)
+    if category is None:
+        abort(404)
+    return {"key": str(category["id"]), "id": category["id"], "title": category["name"]}
+
+
+def build_stock_query(args, scope):
+    """Позиции склада с приходом/расходом за период и остатком на конец периода."""
     f = {k: (args.get(k) or "").strip() for k in FILTER_KEYS}
-    if args.get("show") == "low":          # старые ссылки «Заканчиваются»
-        f["show"], f["stock"] = "", "low"
     start = parse_date(f["start"])
     end = parse_date(f["end"]) or date.today()
-    # Форма шлёт group=0 (скрытое поле) и group=1 (галочка); ссылка без параметра — по умолчанию.
-    f["group"] = "group" not in args or "1" in args.getlist("group")
+    # На странице «Все позиции» можно группировать по типам. Форма шлёт group=0 (скрытое
+    # поле) и group=1 (галочка); ссылка без параметра — группировка включена.
+    f["group"] = scope["key"] == "all" and ("group" not in args or "1" in args.getlist("group"))
     f["sort"] = args.get("sort") if args.get("sort") in SORTS else "name"
     f["dir"] = "desc" if args.get("dir") == "desc" else "asc"
 
@@ -140,19 +151,31 @@ def build_stock_query(args):
     params = [start.isoformat() if start else "0001-01-01", end.isoformat(), end.isoformat()]
 
     where = []
+    if scope["key"] == "none":
+        where.append("category_id IS NULL")
+    elif scope["id"]:
+        where.append("category_id = ?")
+        params.append(scope["id"])
     if f["show"] == "archived":
         where.append("is_active = 0")
     elif f["show"] != "all":
         where.append("is_active = 1")
+    sku_sql = ("REPLACE(REPLACE(REPLACE(REPLACE(LOWER_RU(COALESCE(sku, '')), ' ', ''), "
+               "'-', ''), '.', ''), '/', '')")
+    text_sql = ("LOWER_RU(name || ' ' || COALESCE(brand, '') || ' ' || "
+                "COALESCE(location, '') || ' ' || COALESCE(notes, ''))")
+    if f["q"]:
+        # Быстрый поиск с обзора склада: каждое слово — в артикуле или в названии.
+        for word in f["q"].split():
+            where.append(f"({sku_sql} LIKE ? OR {text_sql} LIKE ?)")
+            params += [f"%{normalize_sku(word)}%", like(word)]
     if f["sku"]:
-        where.append("REPLACE(REPLACE(REPLACE(REPLACE(LOWER_RU(COALESCE(sku, '')), ' ', ''), "
-                     "'-', ''), '.', ''), '/', '') LIKE ?")
+        where.append(f"{sku_sql} LIKE ?")
         params.append(f"%{normalize_sku(f['sku'])}%")
     if f["name"]:
         # Все слова должны встретиться в названии, бренде, месте или примечании.
         for word in f["name"].split():
-            where.append("LOWER_RU(name || ' ' || COALESCE(brand, '') || ' ' || "
-                         "COALESCE(location, '') || ' ' || COALESCE(notes, '')) LIKE ?")
+            where.append(f"{text_sql} LIKE ?")
             params.append(like(word))
     if f["unit"]:
         where.append("unit = ?")
@@ -178,30 +201,59 @@ def build_stock_query(args):
     elif stock == "idle":
         where.append("incoming = 0 AND outgoing = 0")
 
-    base_where = list(where)
-    base_params = list(params)
-    if f["category"] == "none":
-        where.append("category_id IS NULL")
-    elif to_int(f["category"]):
-        where.append("category_id = ?")
-        params.append(to_int(f["category"]))
-
-    def assemble(conditions):
-        return f"SELECT * FROM ({inner}) t" + (f" WHERE {' AND '.join(conditions)}"
-                                                if conditions else "")
-
     direction = f["dir"].upper()
     order = (f"markup_percent IS NULL, markup_percent {direction}" if f["sort"] == "markup"
              else f"{SORTS[f['sort']]} {direction}")
     if f["group"]:
         order = f"category_position, category_name, {order}"
-    sql = f"{assemble(where)} ORDER BY {order}, name COLLATE NOCASE"
-    return sql, params, assemble(base_where), base_params, f, start, end
+    sql = (f"SELECT * FROM ({inner}) t" + (f" WHERE {' AND '.join(where)}" if where else "")
+           + f" ORDER BY {order}, name COLLATE NOCASE")
+    return sql, params, f, start, end
 
 
 @bp.route("/")
 def index():
-    sql, params, all_sql, all_params, f, start, end = build_stock_query(request.args)
+    """Обзор склада: итоги и отдельная карточка для каждого типа запчастей."""
+    if request.args:
+        # Старые ссылки вида /warehouse/?category=…&stock=low ведут на нужную страницу.
+        args = request.args.to_dict()
+        scope = args.pop("category", "") or "all"
+        if args.pop("show", "") == "low":
+            args["stock"] = "low"
+        return redirect(url_for("warehouse.items", scope=scope, **args))
+    stats_sql = """
+        COUNT(p.id) AS positions,
+        COALESCE(SUM(p.quantity * p.purchase_price), 0) AS cost,
+        COALESCE(SUM(p.quantity * p.sale_price), 0) AS retail,
+        COALESCE(SUM(CASE WHEN p.min_quantity > 0 AND p.quantity <= p.min_quantity
+                     THEN 1 ELSE 0 END), 0) AS low,
+        COALESCE(SUM(CASE WHEN p.quantity <= 0 THEN 1 ELSE 0 END), 0) AS empty
+    """
+    types = db.query(
+        f"SELECT pc.id, pc.name, {stats_sql} FROM part_categories pc "
+        f"LEFT JOIN parts p ON p.category_id = pc.id AND p.is_active = 1 "
+        f"GROUP BY pc.id ORDER BY pc.position, pc.name COLLATE NOCASE"
+    )
+    untyped = db.query(f"SELECT {stats_sql} FROM parts p "
+                       f"WHERE p.is_active = 1 AND p.category_id IS NULL", one=True)
+    totals = db.query(f"SELECT {stats_sql} FROM parts p WHERE p.is_active = 1", one=True)
+    recent = db.query(
+        """
+        SELECT m.*, p.name AS part_name, p.unit, o.number AS order_number, o.year AS order_year
+        FROM stock_movements m JOIN parts p ON p.id = m.part_id
+        LEFT JOIN orders o ON o.id = m.order_id
+        ORDER BY m.id DESC LIMIT 8
+        """
+    )
+    return render_template("warehouse/index.html", types=types, untyped=untyped, totals=totals,
+                           recent=recent)
+
+
+@bp.route("/list/<scope>")
+def items(scope):
+    """Позиции одного типа (или все) с колонками, фильтрами и сортировкой."""
+    scope = get_scope(scope)
+    sql, params, f, start, end = build_stock_query(request.args, scope)
     page = db.paginate(sql, params, to_int(request.args.get("page"), 1), per_page=100)
     totals = db.query(
         f"SELECT COUNT(*) AS positions, COALESCE(SUM(balance * purchase_price), 0) AS cost, "
@@ -209,22 +261,23 @@ def index():
         f"SUM(CASE WHEN min_quantity > 0 AND quantity <= min_quantity THEN 1 ELSE 0 END) AS low "
         f"FROM ({sql})", params, one=True,
     )
-    category_counts = {r["category_id"]: r["n"] for r in db.query(
-        f"SELECT category_id, COUNT(*) AS n FROM ({all_sql}) GROUP BY category_id", all_params)}
-    units = [r["unit"] for r in db.query("SELECT DISTINCT unit FROM parts ORDER BY unit")]
-    # Текущие параметры — чтобы переключение типа или сортировки не сбрасывало фильтр.
+    unit_sql = "SELECT DISTINCT unit FROM parts"
+    unit_params = []
+    if scope["id"]:
+        unit_sql += " WHERE category_id = ?"
+        unit_params.append(scope["id"])
+    units = [r["unit"] for r in db.query(unit_sql + " ORDER BY unit", unit_params)]
+    # Текущие параметры — чтобы сортировка и период не сбрасывали фильтр.
     keep = {k: v for k, v in f.items() if k in FILTER_KEYS and v}
-    filtered = any(k != "category" for k in keep)
-    if not f["group"]:
+    filtered = bool(keep)
+    if scope["key"] == "all" and not f["group"]:
         keep["group"] = "0"
     if (f["sort"], f["dir"]) != ("name", "asc"):
         keep.update(sort=f["sort"], dir=f["dir"])
-    keep_nocat = {k: v for k, v in keep.items() if k != "category"}
     advanced = any(f[f"{k}_{b}"] for k in RANGE_FIELDS for b in ("min", "max")) or bool(f["unit"])
     return render_template(
-        "warehouse/index.html", page=page, f=f, totals=totals, categories=categories(),
-        category_counts=category_counts, units=units, keep=keep, keep_nocat=keep_nocat,
-        stock_states=STOCK_STATES, presets=period_presets(), start=start, end=end,
+        "warehouse/items.html", scope=scope, page=page, f=f, totals=totals, units=units,
+        keep=keep, stock_states=STOCK_STATES, presets=period_presets(), start=start, end=end,
         filtered=filtered, advanced=advanced,
     )
 
@@ -306,7 +359,7 @@ def delete(part_id):
         db.execute("DELETE FROM parts WHERE id = ?", (part_id,))
         flash("Позиция удалена.", "success")
     db.commit()
-    return redirect(url_for("warehouse.index"))
+    return redirect(url_for("warehouse.items", scope=part["category_id"] or "none"))
 
 
 # ---------- Типы запчастей ----------

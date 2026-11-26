@@ -2,7 +2,7 @@
 {% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
 {% block title %}{{ part.name }}{% endblock %}
 {% block content %}
-<div class="breadcrumbs"><a href="{{ url_for('warehouse.index') }}">Склад</a></div>
+<div class="breadcrumbs"><a href="{{ url_for('warehouse.index') }}">Склад</a> / <a href="{{ url_for('warehouse.items', scope=part.category_id or 'none') }}">{{ part.category_name or 'Без типа' }}</a></div>
 <div class="page-head">
   <div>
     <h1>{{ part.name }}</h1>
