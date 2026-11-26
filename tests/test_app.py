@@ -3,6 +3,7 @@
 import re
 import sqlite3
 from datetime import date
+from pathlib import Path
 
 import pytest
 from werkzeug.security import generate_password_hash
@@ -494,6 +495,18 @@ def test_backup_download(admin):
     assert response.status_code == 200 and response.data[:15] == b"SQLite format 3"
 
 
+def test_help_is_private_and_readme_is_clean(app, admin):
+    page = text(admin.get("/help"))
+    assert "--set-password" in page and "diesel_service.db" in page
+    post(admin, "/logout", form_url="/")
+    assert admin.get("/help").status_code == 302          # без входа справку не видно
+
+    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
+    for secret in ("--set-password", "diesel_service.db", "secret_key", "DIESEL_", "8000",
+                   "192.168", "попыт", "без логина", "Tailscale", "%"):
+        assert secret not in readme, secret
+
+
 def test_default_name(admin):
     assert "Дизель Сервис" in text(admin.get("/"))
 
@@ -559,7 +572,7 @@ def test_all_pages_render(app, admin):
         f"/warehouse/{ctx['part_id']}", f"/warehouse/{ctx['part_id']}/writeoff",
         "/warehouse/movements", "/finance/", "/finance/new", "/finance/report",
         "/salary/", f"/salary/{ctx['master_id']}", "/masters/", "/masters/new",
-        f"/masters/{ctx['master_id']}/edit", "/settings/", "/password",
+        f"/masters/{ctx['master_id']}/edit", "/settings/", "/password", "/help",
     ]
     for url in pages:
         response = admin.get(url)

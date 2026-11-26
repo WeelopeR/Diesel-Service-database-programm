@@ -42,6 +42,7 @@
     </nav>
     <div class="sidebar-footer">
       <div class="links">
+        <a href="{{ url_for('dashboard.help_page') }}">Справка</a>
         <a href="{{ url_for('auth.change_password') }}">Сменить пароль</a>
         <form class="inline" method="post" action="{{ url_for('auth.logout') }}">{{ csrf() }}<button class="linklike">Выйти</button></form>
       </div>

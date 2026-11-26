@@ -1,9 +1,12 @@
 """Главная страница: сводка по работе сервиса."""
 
-from flask import Blueprint, render_template
+from pathlib import Path
+
+from flask import Blueprint, current_app, render_template
 
 from .. import db
-from ..utils import ACTIVE_STATUSES, current_year, month_bounds, today_str
+from ..auth import LOCKOUT_SECONDS, MAX_FAILED_ATTEMPTS, MIN_PASSWORD_LENGTH
+from ..utils import ACTIVE_STATUSES, PRICE_STEP, current_year, month_bounds, today_str
 from .orders import DEBT_SQL, ORDER_SELECT
 
 bp = Blueprint("dashboard", __name__)
@@ -52,4 +55,16 @@ def index():
         low_stock=low_stock, debts=debts, debts_total=sum(d["due"] for d in debts),
         income=income, expense=expense, profit=income - expense,
         completed_revenue=completed_revenue, orders_this_year=orders_this_year,
+    )
+
+
+@bp.route("/help")
+def help_page():
+    """Инструкция для руководителя. Доступна только после входа, поэтому здесь —
+    всё, что не стоит держать в открытом README: пароль, доступ, где лежат данные."""
+    return render_template(
+        "help.html", db_path=Path(current_app.config["DATABASE"]),
+        data_dir=Path(current_app.config["DATA_DIR"]), price_step=PRICE_STEP,
+        min_password=MIN_PASSWORD_LENGTH, max_attempts=MAX_FAILED_ATTEMPTS,
+        lockout_minutes=LOCKOUT_SECONDS // 60,
     )
