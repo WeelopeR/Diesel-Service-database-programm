@@ -621,6 +621,13 @@ def delete_payment(order_id, tx_id):
 
 # ---------- Печать ----------
 
+@bp.route("/<int:order_id>/warranty")
+def warranty(order_id):
+    """Гарантия по заказ-наряду. Шаблон гарантийного документа пока не оформлен —
+    страница-заготовка, чтобы кнопка уже была на месте."""
+    return render_template("orders/warranty.html", order=get_order(order_id))
+
+
 @bp.route("/<int:order_id>/print")
 def print_order(order_id):
     order = get_order(order_id)

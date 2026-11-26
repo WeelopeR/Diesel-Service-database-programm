@@ -10,6 +10,7 @@
   </div>
   <div class="actions">
     <a class="btn" href="{{ url_for('orders.print_order', order_id=order.id) }}" target="_blank">{{ icon('print') }}Печать</a>
+    <a class="btn" href="{{ url_for('orders.warranty', order_id=order.id) }}">{{ icon('shield') }}Гарантия</a>
     <a class="btn" href="{{ url_for('orders.edit', order_id=order.id) }}">{{ icon('edit') }}Изменить</a>
     
     <form class="inline" method="post" action="{{ url_for('orders.delete', order_id=order.id) }}" data-confirm="Удалить заказ-наряд № {{ order|order_no }}? Запчасти вернутся на склад.">{{ csrf() }}<button class="btn btn-danger btn-icon" title="Удалить">{{ icon('trash') }}</button></form>
