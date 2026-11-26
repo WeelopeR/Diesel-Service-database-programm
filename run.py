@@ -57,6 +57,7 @@ def main():
         print(f"  С других устройств сети: http://{local_ip()}:{args.port}")
     print(f"  База данных: {app.config['DATABASE']}")
     print("Чтобы остановить — закройте окно или нажмите Ctrl+C.")
+    print("Забыли пароль? Закройте окно и запустите: start.bat --set-password")
     serve(app, host=args.host, port=args.port, threads=8)
 
 
