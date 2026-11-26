@@ -38,7 +38,7 @@
           <tr>
             <td class="nowrap">{{ t.date|date }}</td>
             <td>{{ t.category }}</td>
-            <td class="wrap">{% if t.order_id %}<a href="{{ url_for('orders.view', order_id=t.order_id) }}">{{ t.description or ('Заказ-наряд № ' ~ t.order_id|order_no) }}</a>{% else %}{{ t.description or '' }}{% endif %}{% if t.employee_name and not t.order_id and t.employee_name not in (t.description or '') %}<div class="muted small">Сотрудник: {{ t.employee_name }}</div>{% endif %}</td>
+            <td class="wrap">{% if t.order_id %}<a href="{{ url_for('orders.view', order_id=t.order_id) }}">{{ t.description or ('Заказ-наряд № ' ~ t.order_number|order_no(t.order_year)) }}</a>{% else %}{{ t.description or '' }}{% endif %}{% if t.employee_name and not t.order_id and t.employee_name not in (t.description or '') %}<div class="muted small">Сотрудник: {{ t.employee_name }}</div>{% endif %}</td>
             <td class="hide-sm">{{ PAYMENT_METHODS[t.method] }}</td>
             <td class="num strong {{ 'text-success' if t.kind == 'income' else 'text-danger' }}">{{ '+' if t.kind == 'income' else '−' }}{{ t.amount|money }}</td>
             <td class="actions-cell">

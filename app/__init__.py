@@ -1,4 +1,4 @@
-"""Программа учёта дизельного сервиса: клиенты, услуги, склад, заказ-наряды,
+"""«Дизель Сервис» — программа учёта: клиенты, услуги, склад, заказ-наряды,
 финансы и зарплата мастеров."""
 
 import os
@@ -66,7 +66,7 @@ def create_app(test_config=None):
         num=utils.fmt_num,
         date=utils.fmt_date,
         datetime=utils.fmt_datetime,
-        order_no=utils.order_number,
+        order_no=utils.fmt_order_no,
         vehicle=utils.vehicle_title,
     )
 
@@ -74,15 +74,15 @@ def create_app(test_config=None):
     def inject_globals():
         return {
             "csrf_token": auth.csrf_token,
-            "has_role": auth.has_role,
-            "current_user": g.get("user"),
+            "logged_in": g.get("logged_in", False),
             "ORDER_STATUSES": utils.ORDER_STATUSES,
-            "ROLES": utils.ROLES,
             "PAYMENT_METHODS": utils.PAYMENT_METHODS,
+            "PAYMENT_FILTERS": utils.PAYMENT_FILTERS,
             "STOCK_KINDS": utils.STOCK_KINDS,
             "CLIENT_KINDS": utils.CLIENT_KINDS,
             "company_name": _company_name(),
             "today_iso": utils.today_str(),
+            "current_year": utils.current_year(),
         }
 
     def _company_name():

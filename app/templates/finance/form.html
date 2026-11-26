@@ -7,7 +7,7 @@
 <form method="post" class="card" style="max-width: 720px;">
   {{ csrf() }}
   <div class="card-body">
-    {% if tx.order_id %}<div class="notice" style="margin-bottom: 14px;">Это оплата по <a href="{{ url_for('orders.view', order_id=tx.order_id) }}">заказ-наряду № {{ tx.order_id|order_no }}</a>.</div>{% endif %}
+    {% if tx.order_id %}<div class="notice" style="margin-bottom: 14px;">Это оплата по <a href="{{ url_for('orders.view', order_id=tx.order_id) }}">заказ-наряду № {{ tx.order_number|order_no(tx.order_year) }}</a>.</div>{% endif %}
     <div class="form-grid" data-kind-switch="categories" data-income='{{ income_categories|tojson }}' data-expense='{{ expense_categories|tojson }}'>
       {% if not tx.order_id %}
       <div class="field full">
@@ -29,12 +29,12 @@
       <div class="field full"><label for="description">Описание</label><input type="text" id="description" name="description" value="{{ tx.description or '' }}"></div>
       {% if not tx.order_id %}
       <div class="field full">
-        <label for="employee_id">Сотрудник</label>
+        <label for="employee_id">Мастер</label>
         <select id="employee_id" name="employee_id">
           <option value="">—</option>
           {% for e in employees %}<option value="{{ e.id }}" {{ 'selected' if tx.employee_id == e.id }}>{{ e.full_name }}</option>{% endfor %}
         </select>
-        <div class="hint">Укажите для выплат зарплаты и авансов — расход с сотрудником уменьшит его долг по зарплате.</div>
+        <div class="hint">Укажите мастера для выплат зарплаты и авансов — такой расход уменьшит его остаток к выплате.</div>
       </div>
       {% endif %}
     </div>

@@ -1,9 +1,8 @@
 """Склад: номенклатура, приход, списание, инвентаризация и история движения."""
 
-from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
 from .. import db
-from ..auth import role_required
 from ..stock import StockError, move_stock
 from ..utils import (
     CATEGORY_PURCHASE, fmt_money, form_float, form_str, money_round, parse_date, to_float, to_int,
@@ -42,7 +41,6 @@ def active_parts():
 
 
 @bp.route("/")
-@role_required("admin", "manager")
 def index():
     q = request.args.get("q", "").strip()
     show = request.args.get("show", "active")
@@ -71,7 +69,6 @@ def index():
 
 
 @bp.route("/new", methods=["GET", "POST"])
-@role_required("admin", "manager")
 def create():
     if request.method == "POST":
         data = part_form_data()
@@ -98,13 +95,12 @@ def create():
 
 
 @bp.route("/<int:part_id>")
-@role_required("admin", "manager")
 def view(part_id):
     part = get_part(part_id)
     movements = db.query(
         """
-        SELECT m.*, e.full_name AS employee_name
-        FROM stock_movements m LEFT JOIN employees e ON e.id = m.employee_id
+        SELECT m.*, o.number AS order_number, o.year AS order_year
+        FROM stock_movements m LEFT JOIN orders o ON o.id = m.order_id
         WHERE m.part_id = ? ORDER BY m.id DESC LIMIT 300
         """,
         (part_id,),
@@ -113,7 +109,6 @@ def view(part_id):
 
 
 @bp.route("/<int:part_id>/edit", methods=["GET", "POST"])
-@role_required("admin", "manager")
 def edit(part_id):
     part = get_part(part_id)
     if request.method == "POST":
@@ -135,7 +130,6 @@ def edit(part_id):
 
 
 @bp.route("/<int:part_id>/delete", methods=["POST"])
-@role_required("admin")
 def delete(part_id):
     part = get_part(part_id)
     used = db.scalar("SELECT COUNT(*) FROM order_parts WHERE part_id = ?", (part_id,))
@@ -151,7 +145,6 @@ def delete(part_id):
 
 
 @bp.route("/receipt", methods=["GET", "POST"])
-@role_required("admin", "manager")
 def receipt():
     """Приход товара от поставщика: несколько позиций одним документом."""
     parts = active_parts()
@@ -199,10 +192,9 @@ def receipt():
             if doc:
                 description += f", {doc}"
             db.execute(
-                "INSERT INTO transactions (date, kind, category, amount, method, description, "
-                "created_by) VALUES (?, 'expense', ?, ?, ?, ?, ?)",
-                (receipt_date.isoformat(), CATEGORY_PURCHASE, total, method, description,
-                 g.user["id"]),
+                "INSERT INTO transactions (date, kind, category, amount, method, description) "
+                "VALUES (?, 'expense', ?, ?, ?, ?)",
+                (receipt_date.isoformat(), CATEGORY_PURCHASE, total, method, description),
             )
         db.commit()
         flash(f"Приход оформлен: {len(rows)} поз. на сумму {fmt_money(total)}.", "success")
@@ -212,7 +204,6 @@ def receipt():
 
 
 @bp.route("/<int:part_id>/writeoff", methods=["GET", "POST"])
-@role_required("admin", "manager")
 def writeoff(part_id):
     part = get_part(part_id)
     if request.method == "POST":
@@ -245,14 +236,14 @@ def writeoff(part_id):
 
 
 @bp.route("/movements")
-@role_required("admin", "manager")
 def movements():
     kind = request.args.get("kind", "")
     sql = """
-        SELECT m.*, p.name AS part_name, p.sku, p.unit, e.full_name AS employee_name
+        SELECT m.*, p.name AS part_name, p.sku, p.unit,
+               o.number AS order_number, o.year AS order_year
         FROM stock_movements m
         JOIN parts p ON p.id = m.part_id
-        LEFT JOIN employees e ON e.id = m.employee_id
+        LEFT JOIN orders o ON o.id = m.order_id
     """
     params = []
     if kind:

@@ -20,13 +20,14 @@ COMPLETED_STATUSES = ("done", "issued")
 # Заказ-наряд в этих статусах нельзя редактировать, пока статус не изменят.
 LOCKED_STATUSES = ("issued", "cancelled")
 
-ROLES = {
-    "admin": "Руководитель",
-    "manager": "Приёмщик / менеджер",
-    "master": "Мастер",
-}
-
 PAYMENT_METHODS = {"cash": "Наличные", "card": "Карта", "bank": "Безнал (р/с)"}
+
+# Фильтр заказ-нарядов по оплате. «Долг» — техника выдана, а оплачено не всё.
+PAYMENT_FILTERS = {
+    "debt": "Долг (выдан, не оплачен)",
+    "unpaid": "Не оплачен полностью",
+    "paid": "Оплачен полностью",
+}
 
 STOCK_KINDS = {
     "receipt": "Приход",
@@ -210,8 +211,32 @@ def fmt_datetime(value):
         return fmt_date(text)
 
 
-def order_number(order_id):
-    return f"{int(order_id):06d}"
+def current_year():
+    return date.today().year
+
+
+def order_label(number, year):
+    """Полный номер заказ-наряда для записей в истории: «15/2026»."""
+    return f"{number}/{year}"
+
+
+def fmt_order_no(value, year=None):
+    """Номер для показа: в текущем году — «15», в прошлых — «15/2025».
+    Принимает строку заказ-наряда (с полями number и year) или номер и год."""
+    if hasattr(value, "keys"):
+        number, year = value["number"], value["year"]
+    else:
+        number = value
+    if number is None or _empty(number):
+        return ""
+    if year and int(year) != current_year():
+        return order_label(number, year)
+    return str(number)
+
+
+def like(text):
+    """Параметр для поиска через LOWER_RU(...) LIKE ? без учёта регистра."""
+    return f"%{text.strip().lower()}%"
 
 
 def vehicle_title(v):

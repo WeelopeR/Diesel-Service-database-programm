@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Заказ-наряд № {{ order.id|order_no }}</title>
+  <title>Заказ-наряд № {{ order.number }} от {{ order.created_at|date }}</title>
   <style>
     @page { size: A4; margin: 14mm 12mm; }
     * { box-sizing: border-box; }
@@ -64,7 +64,7 @@
     {% if settings.company_requisites %}<div class="req" style="text-align: right;">{{ settings.company_requisites }}</div>{% endif %}
   </header>
 
-  <h1>ЗАКАЗ-НАРЯД № {{ order.id|order_no }}</h1>
+  <h1>ЗАКАЗ-НАРЯД № {{ order.number }}</h1>
   <div class="date">от {{ order.created_at|date }}{% if order.issued_at %} · выдан {{ order.issued_at|date }}{% endif %}</div>
 
   <div class="info">
@@ -77,7 +77,7 @@
     </table>
     <table>
       {% if order.vehicle_id %}
-      <tr><td>Техника:</td><td><strong>{{ order.make or '' }} {{ order.model or '' }}</strong>{% if order.year %}, {{ order.year }} г.{% endif %}</td></tr>
+      <tr><td>Техника:</td><td><strong>{{ order.make or '' }} {{ order.model or '' }}</strong>{% if order.vehicle_year %}, {{ order.vehicle_year }} г.{% endif %}</td></tr>
       {% if order.plate %}<tr><td>Госномер:</td><td>{{ order.plate }}</td></tr>{% endif %}
       {% if order.vin %}<tr><td>VIN:</td><td>{{ order.vin }}</td></tr>{% endif %}
       {% if order.engine %}<tr><td>Двигатель:</td><td>{{ order.engine }}</td></tr>{% endif %}

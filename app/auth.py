@@ -1,53 +1,54 @@
-"""Вход в программу, роли и защита форм."""
+"""Вход в программу по паролю руководителя и защита форм.
 
-import functools
+Программой пользуется один человек — руководитель, поэтому логина нет:
+пароль (в виде хэша) хранится в таблице settings под ключом admin_password_hash."""
+
 import hashlib
 import hmac
 import secrets
 import time
 from urllib.parse import urlparse
 
-from flask import (
-    Blueprint, abort, flash, g, redirect, render_template, request, session, url_for,
-)
+from flask import Blueprint, abort, flash, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import db
-from .utils import form_str
 
 bp = Blueprint("auth", __name__)
 
+PASSWORD_KEY = "admin_password_hash"
+MIN_PASSWORD_LENGTH = 8
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_SECONDS = 5 * 60
-_failed_logins = {}   # (ip, логин) -> (число попыток, время первой попытки)
+_failed_logins = {}   # IP -> (число попыток, время первой попытки)
 
 PUBLIC_ENDPOINTS = {"auth.login", "auth.setup", "static"}
 
 
-def hash_password(password):
-    return generate_password_hash(password)
-
-
-def validate_password(password):
-    if len(password) < 6:
-        return "Пароль должен быть не короче 6 символов."
+def validate_password(password, password2=None):
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return f"Пароль должен быть не короче {MIN_PASSWORD_LENGTH} символов."
+    if password2 is not None and password != password2:
+        return "Пароли не совпадают."
     return None
 
 
-def has_role(*roles):
-    user = g.get("user")
-    return bool(user) and user["role"] in roles
+def get_password_hash():
+    return db.scalar("SELECT value FROM settings WHERE key = ?", (PASSWORD_KEY,))
 
 
-def role_required(*roles):
-    def decorator(view):
-        @functools.wraps(view)
-        def wrapped(*args, **kwargs):
-            if not has_role(*roles):
-                abort(403)
-            return view(*args, **kwargs)
-        return wrapped
-    return decorator
+def set_password(password):
+    """Сохраняет новый пароль. Все открытые сессии после этого разлогиниваются."""
+    db.set_setting(PASSWORD_KEY, generate_password_hash(password))
+    db.commit()
+
+
+def password_is_set():
+    return bool(get_password_hash())
+
+
+def _fingerprint(password_hash):
+    return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
 
 
 def csrf_token():
@@ -65,10 +66,6 @@ def safe_next(target):
     if parsed.scheme or parsed.netloc or not target.startswith("/") or target.startswith("//"):
         return None
     return target
-
-
-def _client_key(username):
-    return (request.remote_addr or "?", username.lower())
 
 
 def _is_locked(key):
@@ -89,32 +86,10 @@ def _register_failure(key):
     _failed_logins[key] = (count + 1, first)
 
 
-def _password_fingerprint(password_hash):
-    return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
-
-
-def load_user():
-    g.user = None
-    user_id = session.get("user_id")
-    if user_id is None:
-        return
-    user = db.query(
-        "SELECT * FROM employees WHERE id = ? AND is_active = 1 AND password_hash IS NOT NULL",
-        (user_id,), one=True,
-    )
-    # Смена пароля сбрасывает все старые сессии.
-    if user and hmac.compare_digest(
-        session.get("pw", ""), _password_fingerprint(user["password_hash"])
-    ):
-        g.user = user
-    else:
-        session.clear()
-
-
-def users_exist():
-    return bool(db.scalar(
-        "SELECT COUNT(*) FROM employees WHERE password_hash IS NOT NULL AND role = 'admin'"
-    ))
+def _start_session(password_hash):
+    session.clear()
+    session.permanent = True
+    session["auth"] = _fingerprint(password_hash)
 
 
 def before_request():
@@ -123,89 +98,58 @@ def before_request():
         if not sent or not hmac.compare_digest(sent, session.get("_csrf", "")):
             abort(400, "Форма устарела. Обновите страницу и попробуйте ещё раз.")
 
-    load_user()
+    password_hash = get_password_hash()
+    # Смена пароля делает недействительными все старые сессии.
+    g.logged_in = bool(password_hash and hmac.compare_digest(
+        session.get("auth", ""), _fingerprint(password_hash)))
+
     if request.endpoint in PUBLIC_ENDPOINTS:
         return None
-    if not users_exist():
+    if not password_hash:
         return redirect(url_for("auth.setup"))
-    if g.user is None:
+    if not g.logged_in:
         return redirect(url_for("auth.login", next=request.full_path.rstrip("?")))
     return None
 
 
-def _start_session(user):
-    session.clear()
-    session.permanent = True
-    session["user_id"] = user["id"]
-    session["pw"] = _password_fingerprint(user["password_hash"])
-
-
 @bp.route("/login", methods=["GET", "POST"])
 def login():
-    if not users_exist():
+    if not password_is_set():
         return redirect(url_for("auth.setup"))
-    if g.user:
+    if g.logged_in:
         return redirect(url_for("dashboard.index"))
 
     error = None
-    username = ""
     if request.method == "POST":
-        username = form_str("username")
-        password = request.form.get("password", "")
-        key = _client_key(username)
+        key = request.remote_addr or "?"
         if _is_locked(key):
             error = "Слишком много неудачных попыток. Подождите 5 минут."
         else:
-            user = db.query(
-                "SELECT * FROM employees WHERE username = ? AND is_active = 1 "
-                "AND password_hash IS NOT NULL",
-                (username,), one=True,
-            )
-            if user and check_password_hash(user["password_hash"], password):
+            password_hash = get_password_hash()
+            if check_password_hash(password_hash, request.form.get("password", "")):
                 _failed_logins.pop(key, None)
-                _start_session(user)
+                _start_session(password_hash)
                 return redirect(safe_next(request.args.get("next")) or url_for("dashboard.index"))
             _register_failure(key)
-            error = "Неверный логин или пароль."
-    return render_template("auth/login.html", error=error, username=username)
+            error = "Неверный пароль."
+    return render_template("auth/login.html", error=error)
 
 
 @bp.route("/setup", methods=["GET", "POST"])
 def setup():
-    """Первый запуск: создание учётной записи руководителя."""
-    if users_exist():
+    """Первый запуск: руководитель придумывает пароль для входа."""
+    if password_is_set():
         return redirect(url_for("auth.login"))
-
-    errors = []
+    error = None
     if request.method == "POST":
-        full_name = form_str("full_name")
-        username = form_str("username")
         password = request.form.get("password", "")
-        password2 = request.form.get("password2", "")
-        company = form_str("company_name")
-        if not full_name:
-            errors.append("Укажите ФИО.")
-        if not username:
-            errors.append("Укажите логин.")
-        problem = validate_password(password)
-        if problem:
-            errors.append(problem)
-        if password != password2:
-            errors.append("Пароли не совпадают.")
-        if not errors:
-            user_id = db.execute(
-                "INSERT INTO employees (full_name, position, role, username, password_hash, is_master) "
-                "VALUES (?, 'Руководитель', 'admin', ?, ?, 0)",
-                (full_name, username, hash_password(password)),
-            )
-            if company:
-                db.set_setting("company_name", company)
-            db.commit()
-            user = db.query("SELECT * FROM employees WHERE id = ?", (user_id,), one=True)
-            _start_session(user)
-            flash("Учётная запись руководителя создана. Добро пожаловать!", "success")
+        error = validate_password(password, request.form.get("password2", ""))
+        if not error:
+            set_password(password)
+            _start_session(get_password_hash())
+            flash("Пароль сохранён. Добро пожаловать!", "success")
             return redirect(url_for("dashboard.index"))
-    return render_template("auth/setup.html", errors=errors)
+    return render_template("auth/setup.html", error=error)
 
 
 @bp.route("/logout", methods=["POST"])
@@ -214,28 +158,18 @@ def logout():
     return redirect(url_for("auth.login"))
 
 
-@bp.route("/profile/password", methods=["GET", "POST"])
+@bp.route("/password", methods=["GET", "POST"])
 def change_password():
-    errors = []
+    error = None
     if request.method == "POST":
-        current = request.form.get("current", "")
-        new = request.form.get("password", "")
-        new2 = request.form.get("password2", "")
-        if not check_password_hash(g.user["password_hash"], current):
-            errors.append("Текущий пароль указан неверно.")
-        problem = validate_password(new)
-        if problem:
-            errors.append(problem)
-        if new != new2:
-            errors.append("Пароли не совпадают.")
-        if not errors:
-            db.execute(
-                "UPDATE employees SET password_hash = ? WHERE id = ?",
-                (hash_password(new), g.user["id"]),
-            )
-            db.commit()
-            user = db.query("SELECT * FROM employees WHERE id = ?", (g.user["id"],), one=True)
-            _start_session(user)
-            flash("Пароль изменён.", "success")
+        if not check_password_hash(get_password_hash(), request.form.get("current", "")):
+            error = "Текущий пароль указан неверно."
+        else:
+            password = request.form.get("password", "")
+            error = validate_password(password, request.form.get("password2", ""))
+        if not error:
+            set_password(password)
+            _start_session(get_password_hash())
+            flash("Пароль изменён. На других устройствах нужно будет войти заново.", "success")
             return redirect(url_for("dashboard.index"))
-    return render_template("auth/password.html", errors=errors)
+    return render_template("auth/password.html", error=error)

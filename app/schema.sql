@@ -7,21 +7,17 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT
 );
 
--- Сотрудники. Логин и пароль необязательны: мастер может быть в базе
--- только для начисления зарплаты, без входа в программу.
+-- Мастера: назначаются на работы, по ним считается зарплата.
+-- В программу входит только руководитель (пароль хранится в settings).
 CREATE TABLE IF NOT EXISTS employees (
-    id            INTEGER PRIMARY KEY,
-    full_name     TEXT NOT NULL,
-    position      TEXT,
-    phone         TEXT,
-    role          TEXT NOT NULL DEFAULT 'master'
-                  CHECK (role IN ('admin', 'manager', 'master')),
-    username      TEXT UNIQUE COLLATE NOCASE,
-    password_hash TEXT,
-    is_master     INTEGER NOT NULL DEFAULT 1,   -- можно назначать на работы
-    is_active     INTEGER NOT NULL DEFAULT 1,
-    notes         TEXT,
-    created_at    TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    id         INTEGER PRIMARY KEY,
+    full_name  TEXT NOT NULL,
+    position   TEXT,
+    phone      TEXT,
+    is_master  INTEGER NOT NULL DEFAULT 1,
+    is_active  INTEGER NOT NULL DEFAULT 1,
+    notes      TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS clients (
@@ -78,8 +74,11 @@ CREATE TABLE IF NOT EXISTS parts (
     created_at     TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
+-- Номер заказ-наряда начинается с 1 каждый календарный год: (year, number).
 CREATE TABLE IF NOT EXISTS orders (
     id             INTEGER PRIMARY KEY,
+    year           INTEGER NOT NULL,
+    number         INTEGER NOT NULL,
     client_id      INTEGER NOT NULL REFERENCES clients (id),
     vehicle_id     INTEGER REFERENCES vehicles (id) ON DELETE SET NULL,
     status         TEXT NOT NULL DEFAULT 'new'
@@ -92,7 +91,6 @@ CREATE TABLE IF NOT EXISTS orders (
     recommendations TEXT,
     notes          TEXT,
     responsible_id INTEGER REFERENCES employees (id) ON DELETE SET NULL,
-    created_by     INTEGER REFERENCES employees (id) ON DELETE SET NULL,
     created_at     TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     planned_date   TEXT,
     completed_at   TEXT,   -- когда работы выполнены (статус «Готов» или «Выдан»)
@@ -133,7 +131,6 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     supplier    TEXT,
     order_id    INTEGER REFERENCES orders (id) ON DELETE SET NULL,
     note        TEXT,
-    employee_id INTEGER REFERENCES employees (id) ON DELETE SET NULL,
     created_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
@@ -148,13 +145,13 @@ CREATE TABLE IF NOT EXISTS transactions (
     description TEXT,
     order_id    INTEGER REFERENCES orders (id) ON DELETE SET NULL,
     employee_id INTEGER REFERENCES employees (id) ON DELETE SET NULL,
-    created_by  INTEGER REFERENCES employees (id) ON DELETE SET NULL,
     created_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_vehicles_client ON vehicles (client_id);
 CREATE INDEX IF NOT EXISTS idx_orders_client ON orders (client_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders (status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_year_number ON orders (year, number);
 CREATE INDEX IF NOT EXISTS idx_order_services_order ON order_services (order_id);
 CREATE INDEX IF NOT EXISTS idx_order_services_master ON order_services (master_id);
 CREATE INDEX IF NOT EXISTS idx_order_parts_order ON order_parts (order_id);
@@ -162,3 +159,16 @@ CREATE INDEX IF NOT EXISTS idx_stock_part ON stock_movements (part_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions (date);
 CREATE INDEX IF NOT EXISTS idx_transactions_order ON transactions (order_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_employee ON transactions (employee_id);
+
+-- Суммы по заказ-наряду: total — работы + запчасти, paid — оплаты, due — остаток.
+CREATE VIEW IF NOT EXISTS order_totals AS
+SELECT order_id, total, paid, ROUND(total - paid, 2) AS due
+FROM (
+    SELECT o.id AS order_id,
+           COALESCE((SELECT SUM(quantity * price) FROM order_services WHERE order_id = o.id), 0)
+         + COALESCE((SELECT SUM(quantity * price) FROM order_parts WHERE order_id = o.id), 0)
+             AS total,
+           COALESCE((SELECT SUM(amount) FROM transactions
+                     WHERE order_id = o.id AND kind = 'income'), 0) AS paid
+    FROM orders o
+);

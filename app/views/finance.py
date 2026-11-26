@@ -3,10 +3,9 @@
 import calendar
 from datetime import date
 
-from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
 from .. import db
-from ..auth import role_required
 from ..utils import (
     EXPENSE_CATEGORIES, INCOME_CATEGORIES, MONTHS, form_float, form_str, money_round,
     parse_date, period_from_request, period_presets, to_int, today_str,
@@ -16,7 +15,9 @@ bp = Blueprint("finance", __name__, url_prefix="/finance")
 
 
 def get_tx(tx_id):
-    tx = db.query("SELECT * FROM transactions WHERE id = ?", (tx_id,), one=True)
+    tx = db.query(
+        "SELECT t.*, o.number AS order_number, o.year AS order_year FROM transactions t "
+        "LEFT JOIN orders o ON o.id = t.order_id WHERE t.id = ?", (tx_id,), one=True)
     if tx is None:
         abort(404)
     return tx
@@ -67,7 +68,6 @@ def employees():
 
 
 @bp.route("/")
-@role_required("admin")
 def index():
     start, end = period_from_request()
     kind = request.args.get("kind", "")
@@ -88,10 +88,10 @@ def index():
 
     rows = db.query(
         f"""
-        SELECT t.*, e.full_name AS employee_name, cb.full_name AS created_by_name
+        SELECT t.*, e.full_name AS employee_name, o.number AS order_number, o.year AS order_year
         FROM transactions t
         LEFT JOIN employees e ON e.id = t.employee_id
-        LEFT JOIN employees cb ON cb.id = t.created_by
+        LEFT JOIN orders o ON o.id = t.order_id
         {where} ORDER BY t.date DESC, t.id DESC
         """,
         params,
@@ -122,7 +122,6 @@ def index():
 
 
 @bp.route("/report")
-@role_required("admin")
 def report():
     """Помесячный отчёт за год."""
     year = to_int(request.args.get("year"), date.today().year)
@@ -160,7 +159,6 @@ def report():
 
 
 @bp.route("/new", methods=["GET", "POST"])
-@role_required("admin")
 def create():
     kind = request.values.get("kind", "expense")
     if request.method == "POST":
@@ -171,9 +169,9 @@ def create():
             return render_form(data)
         db.execute(
             "INSERT INTO transactions (date, kind, category, amount, method, description, "
-            "employee_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "employee_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (data["date"], data["kind"], data["category"], data["amount"], data["method"],
-             data["description"], data["employee_id"], g.user["id"]),
+             data["description"], data["employee_id"]),
         )
         db.commit()
         flash("Запись добавлена.", "success")
@@ -184,7 +182,6 @@ def create():
 
 
 @bp.route("/<int:tx_id>/edit", methods=["GET", "POST"])
-@role_required("admin")
 def edit(tx_id):
     tx = get_tx(tx_id)
     if request.method == "POST":
@@ -208,7 +205,6 @@ def edit(tx_id):
 
 
 @bp.route("/<int:tx_id>/delete", methods=["POST"])
-@role_required("admin")
 def delete(tx_id):
     get_tx(tx_id)
     db.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))

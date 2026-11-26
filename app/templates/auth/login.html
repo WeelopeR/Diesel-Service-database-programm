@@ -8,15 +8,10 @@
     <h1>Вход в программу</h1>
     {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
     <div class="field">
-      <label for="username">Логин</label>
-      <input type="text" id="username" name="username" value="{{ username }}" autocomplete="username" autofocus required>
-    </div>
-    <div class="field">
       <label for="password">Пароль</label>
-      <input type="password" id="password" name="password" autocomplete="current-password" required>
+      <input type="password" id="password" name="password" autocomplete="current-password" autofocus required>
     </div>
     <button class="btn btn-primary" style="width: 100%;">Войти</button>
-    <p class="muted small" style="text-align: center;">Забыли пароль? Попросите руководителя задать новый в разделе «Сотрудники».</p>
   </div>
 </form>
 {% endblock %}

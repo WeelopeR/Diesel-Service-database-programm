@@ -12,9 +12,7 @@
     <a class="btn btn-primary" href="{{ url_for('warehouse.receipt', part_id=part.id) }}">{{ icon('plus') }}Приход</a>
     <a class="btn" href="{{ url_for('warehouse.writeoff', part_id=part.id) }}">Списание / инвентаризация</a>
     <a class="btn" href="{{ url_for('warehouse.edit', part_id=part.id) }}">{{ icon('edit') }}Изменить</a>
-    {% if has_role('admin') %}
     <form class="inline" method="post" action="{{ url_for('warehouse.delete', part_id=part.id) }}" data-confirm="Удалить позицию? Если она уже использовалась, она будет перенесена в архив.">{{ csrf() }}<button class="btn btn-danger">{{ icon('trash') }}</button></form>
-    {% endif %}
   </div>
 </div>
 <div class="kpis">
@@ -29,7 +27,7 @@
   {% if movements %}
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>Дата</th><th>Операция</th><th class="num">Кол-во</th><th class="num hide-sm">Цена</th><th>Комментарий</th><th class="hide-sm">Сотрудник</th></tr></thead>
+      <thead><tr><th>Дата</th><th>Операция</th><th class="num">Кол-во</th><th class="num hide-sm">Цена</th><th>Комментарий</th></tr></thead>
       <tbody>
       {% for m in movements %}
         <tr>
@@ -37,8 +35,7 @@
           <td>{{ STOCK_KINDS[m.kind] }}</td>
           <td class="num {{ 'text-success' if m.quantity > 0 else 'text-danger' }}">{{ '+' if m.quantity > 0 }}{{ m.quantity|qty }}</td>
           <td class="num hide-sm">{{ m.price|money if m.price else '' }}</td>
-          <td>{% if m.order_id %}<a href="{{ url_for('orders.view', order_id=m.order_id) }}">{{ m.note or ('Заказ-наряд № ' ~ m.order_id|order_no) }}</a>{% else %}{{ m.note or '' }}{% endif %}{% if m.supplier %}<div class="muted small">Поставщик: {{ m.supplier }}</div>{% endif %}</td>
-          <td class="hide-sm">{{ m.employee_name or '' }}</td>
+          <td>{% if m.order_id %}<a href="{{ url_for('orders.view', order_id=m.order_id) }}">{{ m.note or ('Заказ-наряд № ' ~ m.order_number|order_no(m.order_year)) }}</a>{% else %}{{ m.note or '' }}{% endif %}{% if m.supplier %}<div class="muted small">Поставщик: {{ m.supplier }}</div>{% endif %}</td>
         </tr>
       {% endfor %}
       </tbody>

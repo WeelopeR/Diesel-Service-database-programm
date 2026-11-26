@@ -8,7 +8,7 @@ from flask import current_app, g
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 DEFAULT_SETTINGS = {
-    "company_name": "Дизельный сервис",
+    "company_name": "Дизель Сервис",
     "company_address": "",
     "company_phone": "",
     "company_requisites": "",
@@ -19,9 +19,24 @@ DEFAULT_SETTINGS = {
 }
 
 
+SCHEMA_VERSION = 1
+
+
+def _lower(value):
+    return value.lower() if isinstance(value, str) else value
+
+
+def _digits(value):
+    return "".join(ch for ch in value if ch.isdigit()) if isinstance(value, str) else value
+
+
 def connect(path):
     conn = sqlite3.connect(path, detect_types=0)
     conn.row_factory = sqlite3.Row
+    # Встроенный LOWER в SQLite не понимает кириллицу — поиск «иванов» не нашёл бы «Иванов».
+    conn.create_function("LOWER_RU", 1, _lower, deterministic=True)
+    # Только цифры телефона: «912 345» найдёт «+7 (912) 345-67-89».
+    conn.create_function("DIGITS", 1, _digits, deterministic=True)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 5000")
@@ -43,14 +58,53 @@ def close_db(_exc=None):
 def init_db(path):
     conn = connect(path)
     try:
+        existing = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'orders'"
+        ).fetchone()
+        if existing:
+            _migrate(conn)
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         for key, value in DEFAULT_SETTINGS.items():
             conn.execute(
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value)
             )
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
     finally:
         conn.close()
+
+
+def _columns(conn, table):
+    return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def _migrate(conn):
+    """Обновляет базу, созданную прошлой версией программы, без потери данных."""
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version < 1:
+        # Нумерация заказ-нарядов по годам.
+        if "number" not in _columns(conn, "orders"):
+            conn.execute("ALTER TABLE orders ADD COLUMN year INTEGER")
+            conn.execute("ALTER TABLE orders ADD COLUMN number INTEGER")
+        counters = {}
+        for row in conn.execute("SELECT id, created_at FROM orders ORDER BY id").fetchall():
+            year = int(row["created_at"][:4])
+            counters[year] = counters.get(year, 0) + 1
+            conn.execute("UPDATE orders SET year = ?, number = ? WHERE id = ?",
+                         (year, counters[year], row["id"]))
+        # Вход только по паролю руководителя: переносим пароль из учётной записи.
+        has_password = conn.execute(
+            "SELECT 1 FROM settings WHERE key = 'admin_password_hash'").fetchone()
+        if not has_password and "password_hash" in _columns(conn, "employees"):
+            row = conn.execute(
+                "SELECT password_hash FROM employees WHERE role = 'admin' "
+                "AND password_hash IS NOT NULL AND is_active = 1 ORDER BY id LIMIT 1"
+            ).fetchone()
+            if row:
+                conn.execute("INSERT INTO settings (key, value) VALUES ('admin_password_hash', ?)",
+                             (row["password_hash"],))
+        conn.execute("UPDATE settings SET value = 'Дизель Сервис' "
+                     "WHERE key = 'company_name' AND value = 'Дизельный сервис'")
 
 
 def query(sql, params=(), one=False):

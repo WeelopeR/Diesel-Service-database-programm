@@ -7,31 +7,19 @@
   <div class="card-body stack">
     <div>
       <h1>Первый запуск</h1>
-      <p class="muted" style="margin-top: 6px;">Создайте учётную запись руководителя. Остальных сотрудников можно будет добавить потом.</p>
+      <p class="muted" style="margin-top: 6px;">Придумайте пароль для входа в программу. Логин не нужен — входить будете только по паролю.</p>
     </div>
-    {% for e in errors %}<div class="flash flash-error">{{ e }}</div>{% endfor %}
-    <div class="field">
-      <label for="company_name">Название сервиса</label>
-      <input type="text" id="company_name" name="company_name" value="{{ request.form.company_name or 'Дизельный сервис' }}">
-    </div>
-    <div class="field">
-      <label for="full_name">Ваше ФИО</label>
-      <input type="text" id="full_name" name="full_name" value="{{ request.form.full_name }}" required>
-    </div>
-    <div class="field">
-      <label for="username">Логин</label>
-      <input type="text" id="username" name="username" value="{{ request.form.username }}" autocomplete="username" required>
-    </div>
+    {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
     <div class="field">
       <label for="password">Пароль</label>
-      <input type="password" id="password" name="password" autocomplete="new-password" required minlength="6">
-      <div class="hint">Не короче 6 символов. Если программа будет доступна из интернета — используйте надёжный пароль.</div>
+      <input type="password" id="password" name="password" autocomplete="new-password" required minlength="8" autofocus>
+      <div class="hint">Не короче 8 символов. Если программа будет доступна из интернета, придумайте надёжный пароль.</div>
     </div>
     <div class="field">
       <label for="password2">Пароль ещё раз</label>
       <input type="password" id="password2" name="password2" autocomplete="new-password" required>
     </div>
-    <button class="btn btn-primary" style="width: 100%;">Создать и войти</button>
+    <button class="btn btn-primary" style="width: 100%;">Сохранить и войти</button>
   </div>
 </form>
 {% endblock %}

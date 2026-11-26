@@ -2,9 +2,9 @@
 {% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
 {% block title %}Зарплата — {{ employee.full_name }}{% endblock %}
 {% block content %}
-{% if has_role('admin') %}<div class="breadcrumbs"><a href="{{ url_for('salary.index', start=start.isoformat(), end=end.isoformat()) }}">Зарплата</a></div>{% endif %}
+<div class="breadcrumbs"><a href="{{ url_for('salary.index', start=start.isoformat(), end=end.isoformat()) }}">Зарплата</a></div>
 <div class="page-head">
-  <div><h1>{{ 'Моя зарплата' if employee.id == current_user.id else employee.full_name }}</h1><div class="sub">{{ start|date }} — {{ end|date }}</div></div>
+  <div><h1>{{ employee.full_name }}</h1><div class="sub">{{ start|date }} — {{ end|date }}</div></div>
 </div>
 {{ period_filter('salary.detail', start, end, presets, path_args={'employee_id': employee.id}) }}
 <div class="kpis">
@@ -25,7 +25,7 @@
           {% for l in lines %}
             <tr>
               <td class="nowrap">{{ l.completed_at|date }}</td>
-              <td><a href="{{ url_for('orders.view', order_id=l.order_id) }}">№ {{ l.order_id|order_no }}</a><div class="muted small">{{ l.client_name }}{% if l.plate %} · {{ l.plate }}{% endif %}</div></td>
+              <td><a href="{{ url_for('orders.view', order_id=l.order_id) }}">№ {{ l|order_no }}</a><div class="muted small">{{ l.client_name }}{% if l.plate %} · {{ l.plate }}{% endif %}</div></td>
               <td class="wrap">{{ l.name }}{% if l.quantity != 1 %} <span class="muted">× {{ l.quantity|qty }}</span>{% endif %}</td>
               <td class="num">{{ l.amount|money }}</td>
               <td class="num">{{ l.master_percent|qty }}%</td>
@@ -47,7 +47,7 @@
         <table class="table">
           <tbody>
           {% for l in in_progress %}
-            <tr><td><a href="{{ url_for('orders.view', order_id=l.order_id) }}">№ {{ l.order_id|order_no }}</a></td><td>{{ status_badge(l.status) }}</td><td class="wrap">{{ l.name }}</td><td class="num">{{ l.earned|money }}</td></tr>
+            <tr><td><a href="{{ url_for('orders.view', order_id=l.order_id) }}">№ {{ l|order_no }}</a></td><td>{{ status_badge(l.status) }}</td><td class="wrap">{{ l.name }}</td><td class="num">{{ l.earned|money }}</td></tr>
           {% endfor %}
           </tbody>
         </table>
@@ -69,7 +69,6 @@
       {% else %}
       <div class="empty">Выплат не было.</div>
       {% endif %}
-      {% if has_role('admin') %}
       <form class="card-foot stack" method="post" action="{{ url_for('salary.pay', employee_id=employee.id) }}" id="pay">
         {{ csrf() }}
         <input type="hidden" name="back" value="{{ request.full_path }}">
@@ -81,7 +80,6 @@
         </div>
         <button class="btn btn-primary" style="width: 100%;">Записать выплату</button>
       </form>
-      {% endif %}
     </div>
   </div>
 </div>

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
-{% block title %}{{ 'Заказ-наряд № ' ~ order.id|order_no if edit else 'Новый заказ-наряд' }}{% endblock %}
+{% block title %}{{ 'Заказ-наряд № ' ~ order|order_no if edit else 'Новый заказ-наряд' }}{% endblock %}
 {% block content %}
-<div class="breadcrumbs"><a href="{{ url_for('orders.index') }}">Заказ-наряды</a>{% if edit %} / <a href="{{ url_for('orders.view', order_id=order.id) }}">№ {{ order.id|order_no }}</a>{% endif %}</div>
+<div class="breadcrumbs"><a href="{{ url_for('orders.index') }}">Заказ-наряды</a>{% if edit %} / <a href="{{ url_for('orders.view', order_id=order.id) }}">№ {{ order|order_no }}</a>{% endif %}</div>
 <div class="page-head">
   <div>
-    <h1>{{ 'Редактирование заказ-наряда № ' ~ order.id|order_no if edit else 'Новый заказ-наряд' }}</h1>
+    <h1>{{ 'Редактирование заказ-наряда № ' ~ order|order_no if edit else 'Новый заказ-наряд' }}</h1>
     <div class="sub">Клиент: <a href="{{ url_for('clients.view', client_id=client.id) }}">{{ client.name }}</a>{% if client.phone %} · {{ client.phone }}{% endif %}{% if not edit %} · <a href="{{ url_for('orders.create') }}">выбрать другого</a>{% endif %}</div>
   </div>
 </div>
@@ -44,10 +44,10 @@
         <div class="field full"><label for="recommendations">Рекомендации клиенту</label><textarea id="recommendations" name="recommendations" rows="2">{{ order.recommendations or '' }}</textarea></div>
         {% endif %}
         <div class="field">
-          <label for="responsible_id">Ответственный</label>
+          <label for="responsible_id">Ответственный мастер</label>
           <select id="responsible_id" name="responsible_id">
             <option value="">—</option>
-            {% for e in staff %}<option value="{{ e.id }}" {{ 'selected' if order.responsible_id == e.id }}>{{ e.full_name }}</option>{% endfor %}
+            {% for e in masters %}<option value="{{ e.id }}" {{ 'selected' if order.responsible_id == e.id }}>{{ e.full_name }}</option>{% endfor %}
           </select>
         </div>
         <div class="field"><label for="planned_date">Плановая дата готовности</label><input type="date" id="planned_date" name="planned_date" value="{{ order.planned_date or '' }}"></div>

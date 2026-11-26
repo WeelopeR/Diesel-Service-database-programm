@@ -9,7 +9,6 @@ from flask import Blueprint, after_this_request, current_app, flash, redirect, r
     request, send_file, url_for
 
 from .. import db
-from ..auth import role_required
 
 bp = Blueprint("settings", __name__, url_prefix="/settings")
 
@@ -18,7 +17,6 @@ FIELDS = ("company_name", "company_address", "company_phone", "company_requisite
 
 
 @bp.route("/", methods=["GET", "POST"])
-@role_required("admin")
 def index():
     if request.method == "POST":
         for key in FIELDS:
@@ -38,7 +36,6 @@ def index():
 
 
 @bp.route("/backup")
-@role_required("admin")
 def backup():
     """Скачать полную копию базы. Копия делается штатным механизмом SQLite,
     поэтому её можно снимать прямо во время работы программы."""

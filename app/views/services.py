@@ -3,7 +3,6 @@
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
 from .. import db
-from ..auth import role_required
 from ..utils import form_float, form_str, money_round
 
 bp = Blueprint("services", __name__, url_prefix="/services")
@@ -35,7 +34,6 @@ def categories():
 
 
 @bp.route("/")
-@role_required("admin", "manager")
 def index():
     q = request.args.get("q", "").strip()
     show = request.args.get("show", "active")
@@ -58,7 +56,6 @@ def index():
 
 
 @bp.route("/new", methods=["GET", "POST"])
-@role_required("admin")
 def create():
     if request.method == "POST":
         data = service_form_data()
@@ -81,7 +78,6 @@ def create():
 
 
 @bp.route("/<int:service_id>/edit", methods=["GET", "POST"])
-@role_required("admin")
 def edit(service_id):
     service = get_service(service_id)
     if request.method == "POST":
@@ -104,7 +100,6 @@ def edit(service_id):
 
 
 @bp.route("/<int:service_id>/delete", methods=["POST"])
-@role_required("admin")
 def delete(service_id):
     get_service(service_id)
     used = db.scalar("SELECT COUNT(*) FROM order_services WHERE service_id = ?", (service_id,))

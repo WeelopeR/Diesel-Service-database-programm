@@ -1,4 +1,4 @@
-{% extends "base.html" if current_user else "auth/base.html" %}
+{% extends "base.html" if logged_in else "auth/base.html" %}
 {% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
 {% block title %}Ошибка {{ code }}{% endblock %}
 {% block content %}

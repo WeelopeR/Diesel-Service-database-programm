@@ -1,8 +1,6 @@
 """Операции со складскими остатками. Все изменения количества проходят
 через move_stock, чтобы каждое движение попадало в историю."""
 
-from flask import g
-
 from . import db
 
 
@@ -23,12 +21,10 @@ def move_stock(part_id, kind, quantity, *, price=None, order_id=None, supplier=N
             f"{_fmt(part['quantity'])} {part['unit']}, нужно {_fmt(-quantity)}."
         )
     db.execute("UPDATE parts SET quantity = ? WHERE id = ?", (new_quantity, part_id))
-    user = g.get("user")
     db.execute(
-        "INSERT INTO stock_movements (part_id, kind, quantity, price, supplier, order_id, note, "
-        "employee_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (part_id, kind, round(quantity, 3), price, supplier, order_id, note,
-         user["id"] if user else None),
+        "INSERT INTO stock_movements (part_id, kind, quantity, price, supplier, order_id, note) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (part_id, kind, round(quantity, 3), price, supplier, order_id, note),
     )
     return new_quantity
 

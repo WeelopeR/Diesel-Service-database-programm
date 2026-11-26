@@ -5,10 +5,10 @@
 или «Выдан» (по дате выполнения). Выплаты — это расходы в финансах,
 привязанные к сотруднику."""
 
-from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
 from .. import db
-from ..auth import role_required, safe_next
+from ..auth import safe_next
 from ..utils import (
     CATEGORY_SALARY, COMPLETED_STATUSES, fmt_date, fmt_money, form_float, form_str,
     money_round, parse_date, period_from_request, period_presets, today_str,
@@ -66,7 +66,6 @@ def employee_summary(employee_id, start, end):
 
 
 @bp.route("/")
-@role_required("admin")
 def index():
     start, end = period_from_request()
     period_acc = accruals(start, end)
@@ -74,12 +73,12 @@ def index():
     period_paid = payouts(start, end)
     total_paid = payouts()
     rows = []
-    for emp in db.query("SELECT * FROM employees ORDER BY is_active DESC, full_name COLLATE NOCASE"):
+    for emp in db.query("SELECT * FROM employees WHERE is_master = 1 "
+                        "ORDER BY is_active DESC, full_name COLLATE NOCASE"):
         acc = period_acc.get(emp["id"])
         balance = money_round((total_acc[emp["id"]]["accrued"] if emp["id"] in total_acc else 0)
                               - total_paid.get(emp["id"], 0))
-        if not (emp["is_master"] and emp["is_active"]) and not acc and not balance \
-                and not period_paid.get(emp["id"]):
+        if not emp["is_active"] and not acc and not balance and not period_paid.get(emp["id"]):
             continue
         rows.append({
             "employee": emp,
@@ -97,15 +96,14 @@ def index():
 
 @bp.route("/<int:employee_id>")
 def detail(employee_id):
-    if g.user["role"] != "admin" and g.user["id"] != employee_id:
-        abort(403)
     employee = db.query("SELECT * FROM employees WHERE id = ?", (employee_id,), one=True)
     if employee is None:
         abort(404)
     start, end = period_from_request()
     lines = db.query(
         f"""
-        SELECT os.*, o.id AS order_id, o.completed_at, o.status, c.name AS client_name,
+        SELECT os.*, o.id AS order_id, o.number, o.year, o.completed_at, o.status,
+               c.name AS client_name,
                v.make, v.model, v.plate,
                os.quantity * os.price AS amount,
                os.quantity * os.price * os.master_percent / 100.0 AS earned
@@ -120,7 +118,7 @@ def detail(employee_id):
     )
     in_progress = db.query(
         f"""
-        SELECT os.*, o.id AS order_id, o.status,
+        SELECT os.*, o.id AS order_id, o.number, o.year, o.status,
                os.quantity * os.price * os.master_percent / 100.0 AS earned
         FROM order_services os JOIN orders o ON o.id = os.order_id
         WHERE NOT {_STATUS_FILTER} AND o.status <> 'cancelled' AND os.master_id = ?
@@ -142,7 +140,6 @@ def detail(employee_id):
 
 
 @bp.route("/<int:employee_id>/pay", methods=["POST"])
-@role_required("admin")
 def pay(employee_id):
     employee = db.query("SELECT * FROM employees WHERE id = ?", (employee_id,), one=True)
     if employee is None:
@@ -158,10 +155,10 @@ def pay(employee_id):
         note = form_str("note")
         db.execute(
             "INSERT INTO transactions (date, kind, category, amount, method, description, "
-            "employee_id, created_by) VALUES (?, 'expense', ?, ?, ?, ?, ?, ?)",
+            "employee_id) VALUES (?, 'expense', ?, ?, ?, ?, ?)",
             (pay_date.isoformat(), CATEGORY_SALARY, amount, method,
              f"Выплата: {employee['full_name']}" + (f" — {note}" if note else ""),
-             employee_id, g.user["id"]),
+             employee_id),
         )
         db.commit()
         flash(f"Выплата {fmt_money(amount)} от {fmt_date(pay_date)} записана в расходы.",

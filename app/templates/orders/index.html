@@ -1,57 +1,109 @@
 {% extends "base.html" %}
 {% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
-{% block title %}Заказ-наряды{% endblock %}
+{% block title %}{{ 'Архив заказ-нарядов' if archive else 'Заказ-наряды' }}{% endblock %}
 {% block content %}
+{% set endpoint_name = 'orders.archive' if archive else 'orders.index' %}
 <div class="page-head">
-  <div><h1>Заказ-наряды</h1></div>
-  {% if has_role('admin', 'manager') %}<div class="actions"><a class="btn btn-primary" href="{{ url_for('orders.create') }}">{{ icon('plus') }}Новый заказ-наряд</a></div>{% endif %}
+  <div>
+    {% if archive %}
+    <h1>Архив заказ-нарядов</h1>
+    <div class="sub">Заказ-наряды прошлых лет. Нумерация каждый год начинается с 1, поэтому номер показан вместе с годом.</div>
+    {% else %}
+    <h1>Заказ-наряды {{ current_year }}</h1>
+    <div class="sub">Текущий год и незакрытые с прошлых лет · <a href="{{ url_for('orders.archive') }}">архив прошлых лет</a></div>
+    {% endif %}
+  </div>
+  {% if not archive %}<div class="actions"><a class="btn btn-primary" href="{{ url_for('orders.create') }}">{{ icon('plus') }}Новый заказ-наряд</a></div>{% endif %}
 </div>
-<form class="toolbar" method="get">
-  <input type="hidden" name="status" value="{{ status }}">
-  <input class="search" type="search" name="q" value="{{ q }}" placeholder="№, клиент, телефон, госномер, VIN, агрегат">
-  <select name="master" style="width: auto;" onchange="this.form.submit()">
-    <option value="">Все мастера</option>
-    {% for m in masters %}<option value="{{ m.id }}" {{ 'selected' if master_id == m.id }}>{{ m.full_name }}</option>{% endfor %}
-  </select>
-  <button class="btn">Найти</button>
-  {% if q or master_id %}<a class="btn btn-ghost" href="{{ url_for('orders.index', status=status) }}">Сбросить</a>{% endif %}
+
+<form class="card filters-card" method="get" action="{{ url_for(endpoint_name) }}">
+  <input type="hidden" name="status" value="{{ filters.status }}">
+  <div class="filters">
+    <div class="field"><label for="f-number">№ заказ-наряда</label><input type="search" id="f-number" name="number" value="{{ filters.number }}" placeholder="Например, {{ '15/' ~ (current_year - 1) if archive else '15' }}"></div>
+    <div class="field wide"><label for="f-client">Клиент</label><input type="search" id="f-client" name="client" value="{{ filters.client }}" placeholder="ФИО, телефон, ИНН"></div>
+    <div class="field wide"><label for="f-vehicle">Техника</label><input type="search" id="f-vehicle" name="vehicle" value="{{ filters.vehicle }}" placeholder="Марка, модель, госномер, VIN"></div>
+    {% if archive %}
+    <div class="field"><label for="f-year">Год</label>
+      <select id="f-year" name="year">
+        <option value="">Все годы</option>
+        {% for y in years %}<option value="{{ y }}" {{ 'selected' if filters.year == y|string }}>{{ y }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div class="field"><label for="f-master">Мастер</label>
+      <select id="f-master" name="master">
+        <option value="">Все мастера</option>
+        {% for m in masters %}<option value="{{ m.id }}" {{ 'selected' if filters.master == m.id|string }}>{{ m.full_name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field"><label for="f-payment">Оплата</label>
+      <select id="f-payment" name="payment">
+        <option value="">Любая</option>
+        {% for k, v in PAYMENT_FILTERS.items() %}<option value="{{ k }}" {{ 'selected' if filters.payment == k }}>{{ v }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="filters-actions">
+      <button class="btn btn-primary">{{ icon('search') }}Найти</button>
+      {% if filtered %}<a class="btn btn-ghost" href="{{ url_for(endpoint_name, status=filters.status) }}">Сбросить</a>{% endif %}
+    </div>
+  </div>
 </form>
+
 <div class="toolbar">
   <div class="pills">
-    {% set active_count = counts.get('new', 0) + counts.get('diagnostics', 0) + counts.get('in_progress', 0) + counts.get('waiting_parts', 0) + counts.get('done', 0) %}
-    <a class="pill {{ 'active' if status == 'active' }}" href="{{ url_for('orders.index', q=q, master=master_id) }}">Открытые<span class="count">{{ active_count }}</span></a>
+    {% if not archive %}
+    {% set open_count = counts.get('new', 0) + counts.get('diagnostics', 0) + counts.get('in_progress', 0) + counts.get('waiting_parts', 0) + counts.get('done', 0) %}
+    <a class="pill {{ 'active' if filters.status == 'active' }}" href="{{ url_for(endpoint_name, status='active', **keep) }}">Открытые<span class="count">{{ open_count }}</span></a>
+    {% endif %}
     {% for k, v in ORDER_STATUSES.items() %}
-    <a class="pill {{ 'active' if status == k }}" href="{{ url_for('orders.index', status=k, q=q, master=master_id) }}">{{ v }}<span class="count">{{ counts.get(k, 0) }}</span></a>
+    <a class="pill {{ 'active' if filters.status == k }}" href="{{ url_for(endpoint_name, status=k, **keep) }}">{{ v }}<span class="count">{{ counts.get(k, 0) }}</span></a>
     {% endfor %}
-    <a class="pill {{ 'active' if status == 'debt' }}" href="{{ url_for('orders.index', status='debt', q=q, master=master_id) }}">С долгом</a>
-    <a class="pill {{ 'active' if status == 'all' }}" href="{{ url_for('orders.index', status='all', q=q, master=master_id) }}">Все</a>
+    <a class="pill {{ 'active' if filters.status == 'all' }}" href="{{ url_for(endpoint_name, status='all', **keep) }}">Все<span class="count">{{ counts.values()|sum }}</span></a>
   </div>
 </div>
+
+{% if not archive and filters.payment in ('debt', 'unpaid') %}
+<div class="notice" style="margin-bottom: 14px;">Неоплаченные заказ-наряды показаны за все годы — долги не уходят в архив.</div>
+{% endif %}
+
 <div class="card">
   {% if page.rows %}
+  <div class="card-head summary">
+    <span>Найдено: <strong>{{ summary.n }}</strong></span>
+    <span>на сумму <strong>{{ summary.total|money }}</strong></span>
+    <span>оплачено <strong class="text-success">{{ summary.paid|money }}</strong></span>
+    {% if summary.debt > 0 %}<span>долг <strong class="text-danger">{{ summary.debt|money }}</strong></span>{% endif %}
+  </div>
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>№</th><th>Дата</th><th>Клиент</th><th>Техника</th><th>Статус</th><th class="hide-sm">Ответственный</th><th class="num">Сумма</th><th class="num hide-sm">Оплачено</th></tr></thead>
+      <thead><tr><th>№</th><th>Дата</th><th>Клиент</th><th>Техника</th><th>Статус</th><th class="hide-sm">Ответственный</th><th class="num">Сумма</th><th class="num">Оплата</th></tr></thead>
       <tbody>
       {% for o in page.rows %}
-        {% set due = o.total - o.paid %}
         <tr data-href="{{ url_for('orders.view', order_id=o.id) }}">
-          <td><a class="strong" href="{{ url_for('orders.view', order_id=o.id) }}">{{ o.id|order_no }}</a></td>
+          <td class="nowrap"><a class="strong" href="{{ url_for('orders.view', order_id=o.id) }}">{{ o|order_no }}</a></td>
           <td class="nowrap">{{ o.created_at|date }}</td>
           <td>{{ o.client_name }}<div class="muted small">{{ o.client_phone or '' }}</div></td>
           <td>{{ o|vehicle if o.make or o.model or o.plate else '—' }}</td>
           <td>{{ status_badge(o.status) }}</td>
           <td class="hide-sm">{{ o.responsible_name or '—' }}</td>
           <td class="num">{{ o.total|money }}</td>
-          <td class="num hide-sm">{% if o.status == 'cancelled' %}—{% elif due > 0.009 %}<span class="{{ 'text-danger' if o.status == 'issued' }}">{{ o.paid|money }}</span>{% else %}<span class="badge badge-success">оплачен</span>{% endif %}</td>
+          <td class="num">
+            {% if o.status == 'cancelled' or not o.total %}<span class="muted">—</span>
+            {% elif o.due <= 0.009 %}<span class="badge badge-success">оплачен</span>
+            {% elif o.status == 'issued' %}<span class="badge badge-danger">долг {{ o.due|money }}</span>
+            {% elif o.paid > 0 %}<span class="muted small">аванс {{ o.paid|money }}</span>
+            {% else %}<span class="muted small">не оплачен</span>{% endif %}
+          </td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
-  {{ pagination(page, 'orders.index') }}
+  {{ pagination(page, endpoint_name) }}
+  {% elif archive and not years %}
+  <div class="empty">В архиве пока ничего нет. Сюда попадут заказ-наряды {{ current_year }} года — с 1 января {{ current_year + 1 }}, когда нумерация начнётся заново.</div>
   {% else %}
-  <div class="empty">Заказ-нарядов не найдено.{% if has_role('admin', 'manager') and not q %} <a href="{{ url_for('orders.create') }}">Создать новый</a>.{% endif %}</div>
+  <div class="empty">Заказ-нарядов не найдено.{% if filtered %} <a href="{{ url_for(endpoint_name, status=filters.status) }}">Сбросить фильтры</a>{% endif %}</div>
   {% endif %}
 </div>
 {% endblock %}

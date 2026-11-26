@@ -3,28 +3,47 @@
 {% block title %}Клиенты{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><h1>Клиенты</h1><div class="sub">{{ page.total }} в базе</div></div>
+  <div><h1>Клиенты</h1><div class="sub">{{ totals.n }} {{ 'найдено' if filtered else 'в базе' }}{% if totals.debtors %} · с долгом: {{ totals.debtors }} на {{ totals.debt|money }}{% endif %}</div></div>
   <div class="actions"><a class="btn btn-primary" href="{{ url_for('clients.create') }}">{{ icon('plus') }}Новый клиент</a></div>
 </div>
-<form class="toolbar" method="get">
-  <input class="search" type="search" name="q" value="{{ q }}" placeholder="Имя, телефон, ИНН, госномер или VIN" autofocus>
-  <button class="btn">Найти</button>
-  {% if q %}<a class="btn btn-ghost" href="{{ url_for('clients.index') }}">Сбросить</a>{% endif %}
+
+<form class="card filters-card" method="get">
+  <div class="filters">
+    <div class="field wide"><label for="f-q">Клиент</label><input type="search" id="f-q" name="q" value="{{ f.q }}" placeholder="ФИО, телефон, ИНН, e-mail" autofocus></div>
+    <div class="field wide"><label for="f-vehicle">Техника</label><input type="search" id="f-vehicle" name="vehicle" value="{{ f.vehicle }}" placeholder="Марка, модель, госномер, VIN"></div>
+    <div class="field"><label for="f-kind">Тип</label>
+      <select id="f-kind" name="kind">
+        <option value="">Все</option>
+        {% for k, v in CLIENT_KINDS.items() %}<option value="{{ k }}" {{ 'selected' if f.kind == k }}>{{ v }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field"><label for="f-sort">Сортировка</label>
+      <select id="f-sort" name="sort">
+        {% for k, (label, _) in sorts.items() %}<option value="{{ k }}" {{ 'selected' if f.sort == k }}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field"><label class="check"><input type="checkbox" name="debt" value="1" {{ 'checked' if f.debt }}>Только с долгом</label></div>
+    <div class="filters-actions">
+      <button class="btn btn-primary">{{ icon('search') }}Найти</button>
+      {% if filtered %}<a class="btn btn-ghost" href="{{ url_for('clients.index', sort=f.sort) }}">Сбросить</a>{% endif %}
+    </div>
+  </div>
 </form>
+
 <div class="card">
   {% if page.rows %}
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>Клиент</th><th>Телефон</th><th class="hide-sm">Тип</th><th class="num">Техника</th><th class="num">Заказов</th><th class="hide-sm">Последний визит</th></tr></thead>
+      <thead><tr><th>Клиент</th><th>Телефон</th><th>Техника</th><th class="num">Заказов</th><th class="hide-sm">Последний визит</th><th class="num">Долг</th></tr></thead>
       <tbody>
       {% for c in page.rows %}
         <tr data-href="{{ url_for('clients.view', client_id=c.id) }}">
-          <td><a href="{{ url_for('clients.view', client_id=c.id) }}" class="strong">{{ c.name }}</a>{% if c.inn %}<div class="muted small">ИНН {{ c.inn }}</div>{% endif %}</td>
+          <td><a href="{{ url_for('clients.view', client_id=c.id) }}" class="strong">{{ c.name }}</a><div class="muted small">{{ CLIENT_KINDS[c.kind] }}{% if c.inn %} · ИНН {{ c.inn }}{% endif %}</div></td>
           <td class="nowrap">{{ c.phone or '—' }}</td>
-          <td class="hide-sm">{{ CLIENT_KINDS[c.kind] }}</td>
-          <td class="num">{{ c.vehicles_count }}</td>
+          <td class="wrap">{{ c.vehicles or '—' }}</td>
           <td class="num">{{ c.orders_count }}</td>
-          <td class="hide-sm">{{ c.last_visit|date or '—' }}</td>
+          <td class="hide-sm nowrap">{{ c.last_visit|date or '—' }}</td>
+          <td class="num">{% if c.debt > 0.009 %}<span class="badge badge-danger">{{ c.debt|money }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -32,7 +51,7 @@
   </div>
   {{ pagination(page, 'clients.index') }}
   {% else %}
-  <div class="empty">{% if q %}Ничего не найдено по запросу «{{ q }}».{% else %}Клиентов пока нет. <a href="{{ url_for('clients.create') }}">Добавьте первого</a>.{% endif %}</div>
+  <div class="empty">{% if filtered %}Никого не нашли. <a href="{{ url_for('clients.index') }}">Сбросить фильтры</a>{% else %}Клиентов пока нет. <a href="{{ url_for('clients.create') }}">Добавьте первого</a>.{% endif %}</div>
   {% endif %}
 </div>
 {% endblock %}
