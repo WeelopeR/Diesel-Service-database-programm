@@ -172,7 +172,8 @@
           <input type="search" class="compact picker-filter" data-filter-for="part-select" placeholder="Поиск: название, артикул…">
           <select id="part-select" name="part_id" class="compact" data-fill required>
             <option value="">— выберите —</option>
-            {% for p in catalog_parts %}<option value="{{ p.id }}" data-price="{{ p.sale_price|num }}" data-stock="{{ p.quantity|qty }} {{ p.unit }}" {{ 'disabled' if p.quantity <= 0 }}>{{ p.name }}{% if p.sku %} · {{ p.sku }}{% endif %} — {{ p.sale_price|money }} (ост. {{ p.quantity|qty }} {{ p.unit }})</option>{% endfor %}
+            {% set pns = namespace(cat=-1) %}
+            {% for p in catalog_parts %}{% if p.category_id != pns.cat %}{% if pns.cat != -1 %}</optgroup>{% endif %}<optgroup label="{{ p.category_name or 'Без типа' }}">{% set pns.cat = p.category_id %}{% endif %}<option value="{{ p.id }}" data-price="{{ p.sale_price|num }}" data-stock="{{ p.quantity|qty }} {{ p.unit }}" {{ 'disabled' if p.quantity <= 0 }}>{{ p.name }}{% if p.sku %} · {{ p.sku }}{% endif %} — {{ p.sale_price|money }} (ост. {{ p.quantity|qty }} {{ p.unit }})</option>{% endfor %}{% if pns.cat != -1 %}</optgroup>{% endif %}
           </select>
           <div class="muted small" data-stock-info></div>
         </div>

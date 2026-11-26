@@ -58,14 +58,25 @@ CREATE TABLE IF NOT EXISTS services (
     notes          TEXT
 );
 
+-- Типы запчастей на складе (Автоэлектрика, Гидравлика, Фильтра…), порядок — position.
+CREATE TABLE IF NOT EXISTS part_categories (
+    id       INTEGER PRIMARY KEY,
+    name     TEXT NOT NULL UNIQUE,
+    position INTEGER NOT NULL DEFAULT 0
+);
+
+-- Цена продажи = закупка × (1 + наценка/100), округлённая до сотни.
+-- Если markup_percent пустой — цена продажи задана вручную.
 CREATE TABLE IF NOT EXISTS parts (
     id             INTEGER PRIMARY KEY,
     sku            TEXT,            -- артикул
     name           TEXT NOT NULL,
     brand          TEXT,
+    category_id    INTEGER REFERENCES part_categories (id) ON DELETE SET NULL,
     unit           TEXT NOT NULL DEFAULT 'шт',
     quantity       REAL NOT NULL DEFAULT 0,
     purchase_price REAL NOT NULL DEFAULT 0,
+    markup_percent REAL,
     sale_price     REAL NOT NULL DEFAULT 0,
     min_quantity   REAL NOT NULL DEFAULT 0,
     location       TEXT,            -- стеллаж / полка
@@ -156,6 +167,7 @@ CREATE INDEX IF NOT EXISTS idx_order_services_order ON order_services (order_id)
 CREATE INDEX IF NOT EXISTS idx_order_services_master ON order_services (master_id);
 CREATE INDEX IF NOT EXISTS idx_order_parts_order ON order_parts (order_id);
 CREATE INDEX IF NOT EXISTS idx_stock_part ON stock_movements (part_id);
+CREATE INDEX IF NOT EXISTS idx_parts_category ON parts (category_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions (date);
 CREATE INDEX IF NOT EXISTS idx_transactions_order ON transactions (order_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_employee ON transactions (employee_id);

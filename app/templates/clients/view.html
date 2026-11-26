@@ -61,7 +61,7 @@
               <td>{{ o|vehicle if o.make or o.model or o.plate else '—' }}</td>
               <td>{{ status_badge(o.status) }}</td>
               <td class="num">{{ o.total|money }}</td>
-              <td class="num">{% if o.status == 'cancelled' or not o.total %}<span class="muted">—</span>{% elif o.due <= 0.009 %}<span class="badge badge-success">оплачен</span>{% elif o.status == 'issued' %}<span class="badge badge-danger">долг {{ o.due|money }}</span>{% else %}<span class="muted small">к оплате {{ o.due|money }}</span>{% endif %}</td>
+              <td class="num">{% if o.status == 'cancelled' or not o.total %}<span class="muted">—</span>{% elif o.due <= 0.009 %}<span class="badge badge-success">оплачен</span>{% elif o.status == 'issued' %}<span class="badge badge-danger">долг {{ o.due|money }}</span>{% else %}<span class="badge badge-outline">{{ 'не оплачен' if not o.paid else 'к оплате ' ~ (o.due|money) }}</span>{% endif %}</td>
             </tr>
           {% endfor %}
           </tbody>

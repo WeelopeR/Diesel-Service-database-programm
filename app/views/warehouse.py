@@ -1,32 +1,87 @@
-"""Склад: номенклатура, приход, списание, инвентаризация и история движения."""
+"""Склад: номенклатура по типам запчастей, наценка, приход, расход, остатки,
+списание, инвентаризация и история движения."""
+
+import re
+import sqlite3
+from datetime import date
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
 from .. import db
 from ..stock import StockError, move_stock
 from ..utils import (
-    CATEGORY_PURCHASE, fmt_money, form_float, form_str, money_round, parse_date, to_float, to_int,
-    today_str,
+    CATEGORY_PURCHASE, fmt_money, form_float, form_str, like, money_round, parse_date,
+    period_presets, price_with_markup, to_float, to_int, today_str,
 )
 
 bp = Blueprint("warehouse", __name__, url_prefix="/warehouse")
 
+# Приход — поступления от поставщиков и излишки по инвентаризации (в т. ч. начальный остаток).
+# Расход — выдача в заказ-наряды за вычетом возвратов, списания и недостачи.
+INCOMING_SQL = "CASE WHEN kind = 'receipt' OR (kind = 'adjust' AND quantity > 0) " \
+               "THEN quantity ELSE 0 END"
+OUTGOING_SQL = "CASE WHEN kind IN ('order', 'return', 'writeoff') OR " \
+               "(kind = 'adjust' AND quantity < 0) THEN -quantity ELSE 0 END"
+
+SORTS = {
+    "sku": "sku COLLATE NOCASE",
+    "name": "name COLLATE NOCASE",
+    "unit": "unit COLLATE NOCASE",
+    "markup": "markup_percent",
+    "price": "sale_price",
+    "in": "incoming",
+    "out": "outgoing",
+    "balance": "balance",
+}
+
+STOCK_STATES = {
+    "in": "Есть в наличии",
+    "out": "Нет в наличии",
+    "low": "Заканчиваются (≤ минимума)",
+    "moved": "Было движение за период",
+    "idle": "Без движения за период",
+}
+
+RANGE_FIELDS = ("markup", "price", "in", "out", "balance")
+RANGE_COLUMNS = {"markup": "markup_percent", "price": "sale_price", "in": "incoming",
+                 "out": "outgoing", "balance": "balance"}
+FILTER_KEYS = ("sku", "name", "category", "unit", "stock", "show", "start", "end",
+               *[f"{k}_{b}" for k in RANGE_FIELDS for b in ("min", "max")])
+
 
 def get_part(part_id):
-    part = db.query("SELECT * FROM parts WHERE id = ?", (part_id,), one=True)
+    part = db.query(
+        "SELECT p.*, pc.name AS category_name FROM parts p "
+        "LEFT JOIN part_categories pc ON pc.id = p.category_id WHERE p.id = ?",
+        (part_id,), one=True,
+    )
     if part is None:
         abort(404)
     return part
 
 
+def categories():
+    return db.query("SELECT * FROM part_categories ORDER BY position, name COLLATE NOCASE")
+
+
 def part_form_data():
+    purchase = money_round(max(0, form_float("purchase_price")))
+    markup_text = form_str("markup_percent")
+    markup = max(0.0, to_float(markup_text)) if markup_text else None
+    sale = price_with_markup(purchase, markup) if markup is not None \
+        else money_round(max(0, form_float("sale_price")))
+    category_id = to_int(request.form.get("category_id"))
+    if category_id and not db.scalar("SELECT 1 FROM part_categories WHERE id = ?", (category_id,)):
+        category_id = None
     return {
         "sku": form_str("sku"),
         "name": form_str("name"),
         "brand": form_str("brand"),
+        "category_id": category_id,
         "unit": form_str("unit") or "шт",
-        "purchase_price": money_round(max(0, form_float("purchase_price"))),
-        "sale_price": money_round(max(0, form_float("sale_price"))),
+        "purchase_price": purchase,
+        "markup_percent": markup,
+        "sale_price": sale,
         "min_quantity": max(0, form_float("min_quantity")),
         "location": form_str("location"),
         "notes": form_str("notes"),
@@ -34,39 +89,147 @@ def part_form_data():
     }
 
 
-def active_parts():
-    return db.query(
-        "SELECT * FROM parts WHERE is_active = 1 ORDER BY name COLLATE NOCASE"
-    )
+PART_COLUMNS = ("sku", "name", "brand", "category_id", "unit", "purchase_price", "markup_percent",
+                "sale_price", "min_quantity", "location", "notes", "is_active")
+
+
+def render_form(part, edit=False):
+    return render_template("warehouse/form.html", part=part, edit=edit, categories=categories())
+
+
+def update_purchase_price(part_id, price):
+    """Новая цена закупки; цена продажи пересчитывается, если задана наценка."""
+    part = db.query("SELECT markup_percent FROM parts WHERE id = ?", (part_id,), one=True)
+    if part["markup_percent"] is None:
+        db.execute("UPDATE parts SET purchase_price = ? WHERE id = ?", (price, part_id))
+    else:
+        db.execute("UPDATE parts SET purchase_price = ?, sale_price = ? WHERE id = ?",
+                   (price, price_with_markup(price, part["markup_percent"]), part_id))
+
+
+# ---------- Список с фильтрами ----------
+
+def normalize_sku(text):
+    return re.sub(r"[\s\-./]", "", text.lower())
+
+
+def build_stock_query(args):
+    """Склад с приходом/расходом за период и остатком на конец периода."""
+    f = {k: (args.get(k) or "").strip() for k in FILTER_KEYS}
+    if args.get("show") == "low":          # старые ссылки «Заканчиваются»
+        f["show"], f["stock"] = "", "low"
+    start = parse_date(f["start"])
+    end = parse_date(f["end"]) or date.today()
+    # Форма шлёт group=0 (скрытое поле) и group=1 (галочка); ссылка без параметра — по умолчанию.
+    f["group"] = "group" not in args or "1" in args.getlist("group")
+    f["sort"] = args.get("sort") if args.get("sort") in SORTS else "name"
+    f["dir"] = "desc" if args.get("dir") == "desc" else "asc"
+
+    inner = f"""
+        SELECT p.*, pc.name AS category_name, COALESCE(pc.position, 9999) AS category_position,
+               COALESCE(m.incoming, 0) AS incoming, COALESCE(m.outgoing, 0) AS outgoing,
+               ROUND(p.quantity - COALESCE(a.after_qty, 0), 3) AS balance
+        FROM parts p
+        LEFT JOIN part_categories pc ON pc.id = p.category_id
+        LEFT JOIN (SELECT part_id, SUM({INCOMING_SQL}) AS incoming, SUM({OUTGOING_SQL}) AS outgoing
+                   FROM stock_movements WHERE date(created_at) BETWEEN ? AND ?
+                   GROUP BY part_id) m ON m.part_id = p.id
+        LEFT JOIN (SELECT part_id, SUM(quantity) AS after_qty FROM stock_movements
+                   WHERE date(created_at) > ? GROUP BY part_id) a ON a.part_id = p.id
+    """
+    params = [start.isoformat() if start else "0001-01-01", end.isoformat(), end.isoformat()]
+
+    where = []
+    if f["show"] == "archived":
+        where.append("is_active = 0")
+    elif f["show"] != "all":
+        where.append("is_active = 1")
+    if f["sku"]:
+        where.append("REPLACE(REPLACE(REPLACE(REPLACE(LOWER_RU(COALESCE(sku, '')), ' ', ''), "
+                     "'-', ''), '.', ''), '/', '') LIKE ?")
+        params.append(f"%{normalize_sku(f['sku'])}%")
+    if f["name"]:
+        # Все слова должны встретиться в названии, бренде, месте или примечании.
+        for word in f["name"].split():
+            where.append("LOWER_RU(name || ' ' || COALESCE(brand, '') || ' ' || "
+                         "COALESCE(location, '') || ' ' || COALESCE(notes, '')) LIKE ?")
+            params.append(like(word))
+    if f["unit"]:
+        where.append("unit = ?")
+        params.append(f["unit"])
+    for key in RANGE_FIELDS:
+        column = RANGE_COLUMNS[key]
+        low, high = to_float(f[f"{key}_min"], None), to_float(f[f"{key}_max"], None)
+        if low is not None:
+            where.append(f"{column} >= ?")
+            params.append(low)
+        if high is not None:
+            where.append(f"{column} <= ?")
+            params.append(high)
+    stock = f["stock"]
+    if stock == "in":
+        where.append("balance > 0")
+    elif stock == "out":
+        where.append("balance <= 0")
+    elif stock == "low":
+        where.append("min_quantity > 0 AND quantity <= min_quantity")
+    elif stock == "moved":
+        where.append("(incoming <> 0 OR outgoing <> 0)")
+    elif stock == "idle":
+        where.append("incoming = 0 AND outgoing = 0")
+
+    base_where = list(where)
+    base_params = list(params)
+    if f["category"] == "none":
+        where.append("category_id IS NULL")
+    elif to_int(f["category"]):
+        where.append("category_id = ?")
+        params.append(to_int(f["category"]))
+
+    def assemble(conditions):
+        return f"SELECT * FROM ({inner}) t" + (f" WHERE {' AND '.join(conditions)}"
+                                                if conditions else "")
+
+    direction = f["dir"].upper()
+    order = (f"markup_percent IS NULL, markup_percent {direction}" if f["sort"] == "markup"
+             else f"{SORTS[f['sort']]} {direction}")
+    if f["group"]:
+        order = f"category_position, category_name, {order}"
+    sql = f"{assemble(where)} ORDER BY {order}, name COLLATE NOCASE"
+    return sql, params, assemble(base_where), base_params, f, start, end
 
 
 @bp.route("/")
 def index():
-    q = request.args.get("q", "").strip()
-    show = request.args.get("show", "active")
-    sql = "SELECT * FROM parts WHERE 1 = 1"
-    params = []
-    if show == "low":
-        sql += " AND is_active = 1 AND quantity <= min_quantity AND min_quantity > 0"
-    elif show == "archived":
-        sql += " AND is_active = 0"
-    elif show != "all":
-        sql += " AND is_active = 1"
-    if q:
-        like = f"%{q}%"
-        sql += " AND (name LIKE ? OR sku LIKE ? OR brand LIKE ? OR location LIKE ?)"
-        params += [like] * 4
-    sql += " ORDER BY name COLLATE NOCASE"
+    sql, params, all_sql, all_params, f, start, end = build_stock_query(request.args)
     page = db.paginate(sql, params, to_int(request.args.get("page"), 1), per_page=100)
     totals = db.query(
-        "SELECT COUNT(*) AS positions, COALESCE(SUM(quantity * purchase_price), 0) AS cost, "
-        "COALESCE(SUM(quantity * sale_price), 0) AS retail, "
-        "SUM(CASE WHEN quantity <= min_quantity AND min_quantity > 0 THEN 1 ELSE 0 END) AS low "
-        "FROM parts WHERE is_active = 1",
-        one=True,
+        f"SELECT COUNT(*) AS positions, COALESCE(SUM(balance * purchase_price), 0) AS cost, "
+        f"COALESCE(SUM(balance * sale_price), 0) AS retail, "
+        f"SUM(CASE WHEN min_quantity > 0 AND quantity <= min_quantity THEN 1 ELSE 0 END) AS low "
+        f"FROM ({sql})", params, one=True,
     )
-    return render_template("warehouse/index.html", page=page, q=q, show=show, totals=totals)
+    category_counts = {r["category_id"]: r["n"] for r in db.query(
+        f"SELECT category_id, COUNT(*) AS n FROM ({all_sql}) GROUP BY category_id", all_params)}
+    units = [r["unit"] for r in db.query("SELECT DISTINCT unit FROM parts ORDER BY unit")]
+    # Текущие параметры — чтобы переключение типа или сортировки не сбрасывало фильтр.
+    keep = {k: v for k, v in f.items() if k in FILTER_KEYS and v}
+    filtered = any(k != "category" for k in keep)
+    if not f["group"]:
+        keep["group"] = "0"
+    if (f["sort"], f["dir"]) != ("name", "asc"):
+        keep.update(sort=f["sort"], dir=f["dir"])
+    keep_nocat = {k: v for k, v in keep.items() if k != "category"}
+    advanced = any(f[f"{k}_{b}"] for k in RANGE_FIELDS for b in ("min", "max")) or bool(f["unit"])
+    return render_template(
+        "warehouse/index.html", page=page, f=f, totals=totals, categories=categories(),
+        category_counts=category_counts, units=units, keep=keep, keep_nocat=keep_nocat,
+        stock_states=STOCK_STATES, presets=period_presets(), start=start, end=end,
+        filtered=filtered, advanced=advanced,
+    )
 
+
+# ---------- Карточка позиции ----------
 
 @bp.route("/new", methods=["GET", "POST"])
 def create():
@@ -75,13 +238,11 @@ def create():
         initial = max(0, form_float("initial_quantity"))
         if not data["name"]:
             flash("Укажите наименование.", "error")
-            return render_template("warehouse/form.html", part=data)
+            return render_form(data)
         part_id = db.execute(
-            "INSERT INTO parts (sku, name, brand, unit, purchase_price, sale_price, min_quantity, "
-            "location, notes, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (data["sku"], data["name"], data["brand"], data["unit"], data["purchase_price"],
-             data["sale_price"], data["min_quantity"], data["location"], data["notes"],
-             data["is_active"]),
+            f"INSERT INTO parts ({', '.join(PART_COLUMNS)}) "
+            f"VALUES ({', '.join('?' * len(PART_COLUMNS))})",
+            tuple(data[c] for c in PART_COLUMNS),
         )
         if initial > 0:
             move_stock(part_id, "adjust", initial, price=data["purchase_price"],
@@ -89,9 +250,10 @@ def create():
         db.commit()
         flash("Позиция добавлена на склад.", "success")
         if request.form.get("add_more"):
-            return redirect(url_for("warehouse.create"))
+            return redirect(url_for("warehouse.create", category_id=data["category_id"] or ""))
         return redirect(url_for("warehouse.view", part_id=part_id))
-    return render_template("warehouse/form.html", part={"is_active": 1, "unit": "шт"})
+    return render_form({"is_active": 1, "unit": "шт",
+                        "category_id": to_int(request.args.get("category_id"))})
 
 
 @bp.route("/<int:part_id>")
@@ -105,7 +267,13 @@ def view(part_id):
         """,
         (part_id,),
     )
-    return render_template("warehouse/view.html", part=part, movements=movements)
+    turnover = db.query(
+        f"SELECT COALESCE(SUM({INCOMING_SQL}), 0) AS incoming, "
+        f"COALESCE(SUM({OUTGOING_SQL}), 0) AS outgoing FROM stock_movements WHERE part_id = ?",
+        (part_id,), one=True,
+    )
+    return render_template("warehouse/view.html", part=part, movements=movements,
+                           turnover=turnover)
 
 
 @bp.route("/<int:part_id>/edit", methods=["GET", "POST"])
@@ -115,18 +283,15 @@ def edit(part_id):
         data = part_form_data()
         if not data["name"]:
             flash("Укажите наименование.", "error")
-            return render_template("warehouse/form.html", part=data, edit=True)
+            return render_form({**dict(part), **data}, edit=True)
         db.execute(
-            "UPDATE parts SET sku=?, name=?, brand=?, unit=?, purchase_price=?, sale_price=?, "
-            "min_quantity=?, location=?, notes=?, is_active=? WHERE id=?",
-            (data["sku"], data["name"], data["brand"], data["unit"], data["purchase_price"],
-             data["sale_price"], data["min_quantity"], data["location"], data["notes"],
-             data["is_active"], part_id),
+            f"UPDATE parts SET {', '.join(c + ' = ?' for c in PART_COLUMNS)} WHERE id = ?",
+            (*(data[c] for c in PART_COLUMNS), part_id),
         )
         db.commit()
         flash("Позиция сохранена.", "success")
         return redirect(url_for("warehouse.view", part_id=part_id))
-    return render_template("warehouse/form.html", part=part, edit=True)
+    return render_form(part, edit=True)
 
 
 @bp.route("/<int:part_id>/delete", methods=["POST"])
@@ -144,10 +309,57 @@ def delete(part_id):
     return redirect(url_for("warehouse.index"))
 
 
+# ---------- Типы запчастей ----------
+
+@bp.route("/categories", methods=["GET", "POST"])
+def manage_categories():
+    if request.method == "POST":
+        action = request.form.get("action")
+        category_id = to_int(request.form.get("id"))
+        name = form_str("name")
+        rows = categories()
+        try:
+            if action == "add" and name:
+                db.execute("INSERT INTO part_categories (name, position) VALUES (?, ?)",
+                           (name, max([r["position"] for r in rows] or [0]) + 1))
+                flash(f"Тип «{name}» добавлен.", "success")
+            elif action == "rename" and category_id and name:
+                db.execute("UPDATE part_categories SET name = ? WHERE id = ?", (name, category_id))
+                flash("Название сохранено.", "success")
+            elif action in ("up", "down") and category_id:
+                ids = [r["id"] for r in rows]
+                i = ids.index(category_id)
+                j = i - 1 if action == "up" else i + 1
+                if 0 <= j < len(ids):
+                    ids[i], ids[j] = ids[j], ids[i]
+                    for position, cid in enumerate(ids, start=1):
+                        db.execute("UPDATE part_categories SET position = ? WHERE id = ?",
+                                   (position, cid))
+            elif action == "delete" and category_id:
+                db.execute("DELETE FROM part_categories WHERE id = ?", (category_id,))
+                flash("Тип удалён. Его позиции остались на складе без типа.", "success")
+            db.commit()
+        except sqlite3.IntegrityError:
+            flash("Тип с таким названием уже есть.", "error")
+        return redirect(url_for("warehouse.manage_categories"))
+    rows = db.query(
+        "SELECT pc.*, (SELECT COUNT(*) FROM parts p WHERE p.category_id = pc.id) AS parts "
+        "FROM part_categories pc ORDER BY pc.position, pc.name COLLATE NOCASE"
+    )
+    without = db.scalar("SELECT COUNT(*) FROM parts WHERE category_id IS NULL")
+    return render_template("warehouse/categories.html", rows=rows, without=without)
+
+
+# ---------- Приход, списание, движение ----------
+
 @bp.route("/receipt", methods=["GET", "POST"])
 def receipt():
     """Приход товара от поставщика: несколько позиций одним документом."""
-    parts = active_parts()
+    parts = db.query(
+        "SELECT p.*, pc.name AS category_name FROM parts p "
+        "LEFT JOIN part_categories pc ON pc.id = p.category_id WHERE p.is_active = 1 "
+        "ORDER BY COALESCE(pc.position, 9999), p.name COLLATE NOCASE"
+    )
     if request.method == "POST":
         supplier = form_str("supplier")
         doc = form_str("document")
@@ -159,31 +371,26 @@ def receipt():
         update_prices = bool(request.form.get("update_prices"))
 
         rows = []
-        for part_id, qty, price, sale in zip(
-            request.form.getlist("part_id"), request.form.getlist("quantity"),
-            request.form.getlist("price"), request.form.getlist("sale_price"),
-        ):
+        for part_id, qty, price in zip(request.form.getlist("part_id"),
+                                       request.form.getlist("quantity"),
+                                       request.form.getlist("price")):
             part_id = to_int(part_id)
             qty = to_float(qty)
             if not part_id or qty <= 0:
                 continue
-            rows.append((part_id, qty, money_round(max(0, to_float(price))),
-                         money_round(max(0, to_float(sale)))))
+            rows.append((part_id, qty, money_round(max(0, to_float(price)))))
         if not rows:
             flash("Добавьте хотя бы одну позицию с количеством больше нуля.", "error")
             return render_template("warehouse/receipt.html", parts=parts)
 
         note = f"Документ: {doc}" if doc else None
         total = 0.0
-        for part_id, qty, price, sale in rows:
+        for part_id, qty, price in rows:
             get_part(part_id)
             move_stock(part_id, "receipt", qty, price=price, supplier=supplier or None, note=note)
             total += qty * price
-            if update_prices:
-                if price > 0:
-                    db.execute("UPDATE parts SET purchase_price = ? WHERE id = ?", (price, part_id))
-                if sale > 0:
-                    db.execute("UPDATE parts SET sale_price = ? WHERE id = ?", (sale, part_id))
+            if update_prices and price > 0:
+                update_purchase_price(part_id, price)
         total = money_round(total)
         if record_expense and total > 0:
             description = "Приход товара"

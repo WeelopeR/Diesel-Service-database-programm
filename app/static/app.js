@@ -155,8 +155,10 @@
       select.addEventListener("change", function () {
         var opt = select.options[select.selectedIndex];
         row.querySelector("[name=price]").value = opt.getAttribute("data-price") || "";
-        row.querySelector("[name=sale_price]").value = opt.getAttribute("data-sale") || "";
         row.querySelector("[data-unit]").textContent = opt.getAttribute("data-unit") || "";
+        var markup = opt.getAttribute("data-markup");
+        row.querySelector("[data-sale]").textContent = opt.value
+          ? (opt.getAttribute("data-sale") || "") + (markup ? " · +" + markup + "%" : " · вручную") : "";
         recalc();
       });
       row.querySelector("[data-remove]").addEventListener("click", function () {

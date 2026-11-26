@@ -6,7 +6,7 @@
 <div class="page-head">
   <div>
     <h1>{{ part.name }}</h1>
-    <div class="sub">{% if part.sku %}Арт. {{ part.sku }} · {% endif %}{{ part.brand or '' }}{% if not part.is_active %} · <span class="badge">архив</span>{% endif %}</div>
+    <div class="sub">{{ [part.category_name or 'Без типа', ('Арт. ' ~ part.sku) if part.sku else None, part.brand]|select|join(' · ') }}{% if not part.is_active %} · <span class="badge">архив</span>{% endif %}</div>
   </div>
   <div class="actions">
     <a class="btn btn-primary" href="{{ url_for('warehouse.receipt', part_id=part.id) }}">{{ icon('plus') }}Приход</a>
@@ -17,8 +17,9 @@
 </div>
 <div class="kpis">
   <div class="kpi"><div class="kpi-label">Остаток</div><div class="kpi-value {{ 'text-danger' if part.min_quantity and part.quantity <= part.min_quantity }}">{{ part.quantity|qty }} {{ part.unit }}</div><div class="kpi-note">{% if part.min_quantity %}минимум {{ part.min_quantity|qty }}{% else %}минимум не задан{% endif %}</div></div>
+  <div class="kpi"><div class="kpi-label">Приход / расход за всё время</div><div class="kpi-value">{{ turnover.incoming|qty }} / {{ turnover.outgoing|qty }}</div><div class="kpi-note">{{ part.unit }}</div></div>
   <div class="kpi"><div class="kpi-label">Цена закупки</div><div class="kpi-value">{{ part.purchase_price|money }}</div></div>
-  <div class="kpi"><div class="kpi-label">Цена продажи</div><div class="kpi-value">{{ part.sale_price|money }}</div>{% if part.purchase_price %}<div class="kpi-note">наценка {{ ((part.sale_price / part.purchase_price - 1) * 100)|round|int }}%</div>{% endif %}</div>
+  <div class="kpi"><div class="kpi-label">Цена продажи</div><div class="kpi-value">{{ part.sale_price|money }}</div><div class="kpi-note">{% if part.markup_percent is not none %}наценка {{ part.markup_percent|qty }}%, округлено до сотни{% elif part.purchase_price %}задана вручную, наценка {{ ((part.sale_price / part.purchase_price - 1) * 100)|round|int }}%{% else %}задана вручную{% endif %}</div></div>
   <div class="kpi"><div class="kpi-label">Место</div><div class="kpi-value" style="font-size: 16px;">{{ part.location or '—' }}</div></div>
 </div>
 {% if part.notes %}<div class="card"><div class="card-body pre">{{ part.notes }}</div></div>{% endif %}

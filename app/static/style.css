@@ -221,6 +221,23 @@ legend { font-weight: 650; padding: 0 6px; }
 .filters .field label { font-size: 12px; margin-bottom: 4px; }
 .filters-actions { display: flex; gap: 8px; }
 .filters .field label.check { font-size: 14px; margin: 0; min-height: 36px; }
+.inline-edit { display: flex; gap: 8px; align-items: center; }
+.inline-edit input[type=text] { max-width: 440px; }
+input[readonly] { background: var(--surface-2); color: var(--text-2); }
+.category-pills { margin-bottom: 14px; }
+.advanced { margin-top: 12px; border-top: 1px dashed var(--border); padding-top: 10px; }
+.advanced summary { cursor: pointer; color: var(--primary); font-weight: 550; font-size: 13px; margin-bottom: 10px; }
+.advanced:not([open]) summary { margin-bottom: 0; }
+.range { display: flex; gap: 6px; }
+.range input { min-width: 0; }
+.filters-bottom { display: flex; gap: 12px 20px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 12px; }
+.filters-options { display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; }
+.filters-options .pill { padding: 3px 10px; font-size: 12px; }
+.table th.sortable a { color: inherit; display: inline-flex; gap: 4px; align-items: center; text-decoration: none; }
+.table th.sortable a:hover { color: var(--text); }
+.table th.sorted { color: var(--text); }
+.sort-mark { font-size: 10px; opacity: .45; }
+.sorted .sort-mark { opacity: 1; color: var(--primary); }
 .card-head.summary { justify-content: flex-start; gap: 6px 18px; color: var(--text-2); font-size: 13px; padding: 10px 16px; }
 .pills { display: flex; gap: 6px; flex-wrap: wrap; }
 .pill {
@@ -243,6 +260,8 @@ legend { font-weight: 650; padding: 0 6px; }
 .st-done { background: #dcfce7; color: #166534; }
 .st-issued { background: #e5e7eb; color: #374151; }
 .st-cancelled { background: #fee2e2; color: #991b1b; }
+/* «Не оплачен» / «аванс»: заметнее серого текста, но спокойнее красного «долга». */
+.badge.badge-outline { background: var(--surface-2); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--border-strong); }
 .badge-danger { background: var(--danger-soft); color: var(--danger); }
 .badge-success { background: var(--success-soft); color: var(--success); }
 .badge-warning { background: var(--warning-soft); color: var(--warning); }

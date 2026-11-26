@@ -91,8 +91,8 @@
             {% if o.status == 'cancelled' or not o.total %}<span class="muted">—</span>
             {% elif o.due <= 0.009 %}<span class="badge badge-success">оплачен</span>
             {% elif o.status == 'issued' %}<span class="badge badge-danger">долг {{ o.due|money }}</span>
-            {% elif o.paid > 0 %}<span class="muted small">аванс {{ o.paid|money }}</span>
-            {% else %}<span class="muted small">не оплачен</span>{% endif %}
+            {% elif o.paid > 0 %}<span class="badge badge-outline">аванс {{ o.paid|money }}</span>
+            {% else %}<span class="badge badge-outline">не оплачен</span>{% endif %}
           </td>
         </tr>
       {% endfor %}

@@ -143,16 +143,19 @@ def create_full_order(app, client):
     service_id = scalar(app, "SELECT id FROM services")
 
     post(client, "/warehouse/new", {"name": "Распылитель DLLA", "sku": "DLLA150", "unit": "шт",
-                                     "purchase_price": "1000", "sale_price": "1800",
+                                     "purchase_price": "1000", "markup_percent": "80",
                                      "min_quantity": "2", "is_active": "1",
                                      "initial_quantity": "3"})
+    assert scalar(app, "SELECT sale_price FROM parts") == 1800
     part_id = scalar(app, "SELECT id FROM parts")
     post(client, "/warehouse/receipt", {
         "supplier": "ООО Поставщик", "document": "Накл. 15", "date": f"{YEAR}-01-20",
-        "part_id": str(part_id), "quantity": "5", "price": "1100", "sale_price": "1900",
+        "part_id": str(part_id), "quantity": "5", "price": "1100",
         "record_expense": "1", "update_prices": "1", "method": "bank",
     })
     assert scalar(app, "SELECT quantity FROM parts WHERE id = ?", (part_id,)) == 8
+    # Новая закупка 1100 × 1,8 = 1980 → округлено до 2000
+    assert scalar(app, "SELECT sale_price FROM parts WHERE id = ?", (part_id,)) == 2000
 
     order_id = make_order(app, client, client_id, vehicle_id, mileage="350000",
                           complaint="Дымит", units="Форсунки 4 шт.", responsible_id=master_id)
@@ -194,24 +197,24 @@ def test_full_order_flow(app, admin):
     line = query(app, "SELECT * FROM order_services WHERE order_id = ?", (order_id,))[0]
     assert (line["price"], line["master_percent"], line["quantity"]) == (4500, 40, 4)
     part_line = query(app, "SELECT * FROM order_parts WHERE order_id = ?", (order_id,))[0]
-    assert part_line["price"] == 1900
+    assert part_line["price"] == 2000
     assert scalar(app, "SELECT quantity FROM parts WHERE id = ?", (part_id,)) == 4
 
     # Нельзя списать больше, чем есть
     post(admin, f"{view}/parts/add", {"part_id": str(part_id), "quantity": "10"}, form_url=view)
     assert scalar(app, "SELECT quantity FROM parts WHERE id = ?", (part_id,)) == 4
 
-    assert "25 600 ₽" in text(admin.get(view))   # 4×4500 + 4×1900
+    assert "26 000 ₽" in text(admin.get(view))   # 4×4500 + 4×2000
     assert scalar(app, "SELECT amount FROM transactions WHERE category = 'Закупка запчастей'") \
         == 5500
 
     post(admin, f"{view}/status", {"status": "done"}, form_url=view)
-    post(admin, f"{view}/payments/add", {"amount": "25600", "method": "card"}, form_url=view)
+    post(admin, f"{view}/payments/add", {"amount": "26000", "method": "card"}, form_url=view)
     post(admin, f"{view}/status", {"status": "issued"}, form_url=view)
     order = query(app, "SELECT * FROM orders WHERE id = ?", (order_id,))[0]
     assert order["status"] == "issued" and order["completed_at"] and order["issued_at"]
     payment = query(app, "SELECT * FROM transactions WHERE order_id = ?", (order_id,))[0]
-    assert payment["amount"] == 25600 and f"№ 1/{YEAR}" in payment["description"]
+    assert payment["amount"] == 26000 and f"№ 1/{YEAR}" in payment["description"]
 
     salary = text(admin.get("/salary/"))
     assert "Сидоров Иван" in salary and "7 200 ₽" in salary   # 18 000 × 40 %
@@ -244,7 +247,7 @@ def test_cancel_blocked_with_payments(app, admin):
 def test_part_quantity_change_moves_stock(app, admin):
     ctx = create_full_order(app, admin)
     line_id = scalar(app, "SELECT id FROM order_parts")
-    post(admin, f"{ctx['view']}/parts/{line_id}/update", {"quantity": "2", "price": "1900"},
+    post(admin, f"{ctx['view']}/parts/{line_id}/update", {"quantity": "2", "price": "2000"},
          form_url=ctx["view"])
     assert scalar(app, "SELECT quantity FROM parts WHERE id = ?", (ctx["part_id"],)) == 6
     post(admin, f"{ctx['view']}/parts/{line_id}/delete", form_url=ctx["view"])
@@ -346,6 +349,101 @@ def test_client_filters(app, admin):
     assert "4 800 ₽" in text(admin.get(f"/clients/{debtor}"))
 
 
+# ---------- Склад ----------
+
+def make_part(app, client, name, category=None, **extra):
+    data = {"name": name, "unit": "шт", "is_active": "1", **extra}
+    if category:
+        data["category_id"] = scalar(app, "SELECT id FROM part_categories WHERE name = ?",
+                                     (category,))
+    post(client, "/warehouse/new", data)
+    return scalar(app, "SELECT id FROM parts WHERE name = ?", (name,))
+
+
+def test_part_categories_seeded_and_editable(app, admin):
+    names = [r["name"] for r in query(app, "SELECT name FROM part_categories ORDER BY position")]
+    assert names == ["Автоэлектрика", "Гидравлика",
+                     "Запчасти для ремонта импортной мех. техники",
+                     "Запчасти для ремонта отечественной мех. техники",
+                     "Расходные материалы", "Фильтра", "Готовые форсунки на продажу"]
+    filters_id = scalar(app, "SELECT id FROM part_categories WHERE name = 'Фильтра'")
+    url = "/warehouse/categories"
+    post(admin, url, {"action": "rename", "id": filters_id, "name": "Фильтры"})
+    post(admin, url, {"action": "up", "id": filters_id})
+    post(admin, url, {"action": "add", "name": "Инструмент"})
+    post(admin, url, {"action": "add", "name": "Инструмент"})       # дубль не создаётся
+    names = [r["name"] for r in query(app, "SELECT name FROM part_categories ORDER BY position")]
+    assert names[4:6] == ["Фильтры", "Расходные материалы"] and names[-1] == "Инструмент"
+    assert names.count("Инструмент") == 1
+
+    part_id = make_part(app, admin, "Фильтр топливный", "Фильтры", purchase_price="500",
+                        markup_percent="40")
+    post(admin, url, {"action": "delete", "id": filters_id})
+    assert scalar(app, "SELECT category_id FROM parts WHERE id = ?", (part_id,)) is None
+
+
+def test_markup_price_rounding(app, admin):
+    cases = [("1170", "30", 1500), ("1000", "30", 1300), ("60", "100", 100), ("2150", "0", 2200)]
+    for i, (purchase, markup, expected) in enumerate(cases):
+        part_id = make_part(app, admin, f"Позиция {i}", purchase_price=purchase,
+                            markup_percent=markup)
+        assert scalar(app, "SELECT sale_price FROM parts WHERE id = ?", (part_id,)) == expected
+    manual = make_part(app, admin, "Ручная цена", purchase_price="1000", sale_price="1234")
+    row = query(app, "SELECT * FROM parts WHERE id = ?", (manual,))[0]
+    assert row["markup_percent"] is None and row["sale_price"] == 1234
+
+
+def test_warehouse_columns_and_filters(app, admin):
+    nozzle = make_part(app, admin, "Форсунка Bosch 0 445 110 376", "Готовые форсунки на продажу",
+                       sku="0 445 110 376", purchase_price="12000", markup_percent="25",
+                       initial_quantity="4", brand="Bosch")
+    filter_ = make_part(app, admin, "Фильтр топливный Mann", "Фильтра", sku="WK 8110",
+                        purchase_price="900", markup_percent="50", initial_quantity="10",
+                        min_quantity="5")
+    oil = make_part(app, admin, "Масло моторное", "Расходные материалы", unit="л",
+                    purchase_price="400", markup_percent="40", initial_quantity="20")
+    # Движение: 7 фильтров в расход, 2 литра масла списано в январе 2020
+    with app.app_context():
+        from app.stock import move_stock
+        move_stock(filter_, "order", -7)
+        move_stock(oil, "writeoff", -2)
+        db.execute("UPDATE stock_movements SET created_at = '2020-01-15 10:00:00' "
+                   "WHERE part_id = ? AND kind = 'writeoff'", (oil,))
+        db.commit()
+
+    def found(url):
+        html = text(admin.get(url))
+        return [int(x) for x in re.findall(r'data-href="/warehouse/(\d+)"', html)], html
+
+    ids, html = found("/warehouse/")
+    assert set(ids) == {nozzle, filter_, oil}
+    for header in ("Артикул", "Наименование", "Ед. изм.", "Наценка", "Цена продажи", "Приход",
+                   "Расход", "Остаток"):
+        assert header in html
+    assert "15 000 ₽" in html                          # 12 000 × 1,25
+
+    def ids_of(url):
+        return set(found(url)[0])
+
+    cat = scalar(app, "SELECT id FROM part_categories WHERE name = 'Фильтра'")
+    assert ids_of(f"/warehouse/?category={cat}") == {filter_}
+    assert ids_of("/warehouse/?sku=0445110") == {nozzle}          # артикул без пробелов
+    assert ids_of("/warehouse/?name=bosch форсунка") == {nozzle}   # все слова, любой порядок
+    assert ids_of("/warehouse/?unit=л") == {oil}
+    assert ids_of("/warehouse/?markup_min=30&markup_max=45") == {oil}
+    assert ids_of("/warehouse/?price_min=10000") == {nozzle}
+    assert ids_of("/warehouse/?out_min=1") == {filter_, oil}
+    assert ids_of("/warehouse/?balance_max=3") == {filter_}          # 10 − 7 = 3
+    assert ids_of("/warehouse/?stock=low") == {filter_}
+    # Период: списание масла было только в январе 2020
+    assert ids_of("/warehouse/?start=2020-01-01&end=2020-12-31&stock=moved") == {oil}
+    assert ids_of("/warehouse/?start=2020-01-01&end=2020-12-31&out_min=2&out_max=2") == {oil}
+    # Остаток на конец периода: на 31.01.2020 масла ещё не было (приход позже)
+    assert ids_of("/warehouse/?end=2020-01-31&balance_min=1") == set()
+    # Сортировка по остатку по убыванию, без группировки
+    assert found("/warehouse/?sort=balance&dir=desc&group=0")[0] == [oil, nozzle, filter_]
+
+
 # ---------- Прочее ----------
 
 def test_backup_download(admin):
@@ -411,7 +509,9 @@ def test_all_pages_render(app, admin):
         f"/orders/new?client_id={ctx['client_id']}", ctx["view"], f"{ctx['view']}/edit",
         f"{ctx['view']}/print", "/clients/", "/clients/?q=А123&debt=1&sort=recent",
         f"/clients/{ctx['client_id']}", "/clients/new", "/services/", "/services/new",
-        "/warehouse/", "/warehouse/?show=low", "/warehouse/new", "/warehouse/receipt",
+        "/warehouse/", "/warehouse/?show=low", "/warehouse/?stock=idle&sort=markup&dir=desc",
+        "/warehouse/?group=0&group=1&category=none", "/warehouse/categories",
+        "/warehouse/new", "/warehouse/receipt",
         f"/warehouse/{ctx['part_id']}", f"/warehouse/{ctx['part_id']}/writeoff",
         "/warehouse/movements", "/finance/", "/finance/new", "/finance/report",
         "/salary/", f"/salary/{ctx['master_id']}", "/masters/", "/masters/new",

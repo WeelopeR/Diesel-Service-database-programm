@@ -19,7 +19,18 @@ DEFAULT_SETTINGS = {
 }
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# Типы запчастей, которые создаются при первом запуске (потом их можно менять).
+DEFAULT_PART_CATEGORIES = [
+    "Автоэлектрика",
+    "Гидравлика",
+    "Запчасти для ремонта импортной мех. техники",
+    "Запчасти для ремонта отечественной мех. техники",
+    "Расходные материалы",
+    "Фильтра",
+    "Готовые форсунки на продажу",
+]
 
 
 def _lower(value):
@@ -61,9 +72,14 @@ def init_db(path):
         existing = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'orders'"
         ).fetchone()
+        version = conn.execute("PRAGMA user_version").fetchone()[0] if existing else 0
         if existing:
-            _migrate(conn)
+            _migrate(conn, version)
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        if version < 2:
+            for position, name in enumerate(DEFAULT_PART_CATEGORIES, start=1):
+                conn.execute("INSERT OR IGNORE INTO part_categories (name, position) VALUES (?, ?)",
+                             (name, position))
         for key, value in DEFAULT_SETTINGS.items():
             conn.execute(
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value)
@@ -78,9 +94,13 @@ def _columns(conn, table):
     return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
 
 
-def _migrate(conn):
+def _table_exists(conn, table):
+    return bool(conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)).fetchone())
+
+
+def _migrate(conn, version):
     """Обновляет базу, созданную прошлой версией программы, без потери данных."""
-    version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version < 1:
         # Нумерация заказ-нарядов по годам.
         if "number" not in _columns(conn, "orders"):
@@ -105,6 +125,14 @@ def _migrate(conn):
                              (row["password_hash"],))
         conn.execute("UPDATE settings SET value = 'Дизель Сервис' "
                      "WHERE key = 'company_name' AND value = 'Дизельный сервис'")
+    if version < 2 and _table_exists(conn, "parts"):
+        # Типы запчастей и наценка. У старых позиций цена продажи остаётся ручной.
+        columns = _columns(conn, "parts")
+        if "category_id" not in columns:
+            conn.execute("ALTER TABLE parts ADD COLUMN category_id INTEGER "
+                         "REFERENCES part_categories (id) ON DELETE SET NULL")
+        if "markup_percent" not in columns:
+            conn.execute("ALTER TABLE parts ADD COLUMN markup_percent REAL")
 
 
 def query(sql, params=(), one=False):

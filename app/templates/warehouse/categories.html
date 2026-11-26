@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Типы запчастей{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('warehouse.index') }}">Склад</a></div>
+<div class="page-head"><div><h1>Типы запчастей</h1><div class="sub">По ним группируется склад. Порядок здесь — порядок на складе.</div></div></div>
+<div class="card" style="max-width: 860px;">
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Название</th><th class="num">Позиций</th><th></th></tr></thead>
+      <tbody>
+      {% for c in rows %}
+        <tr>
+          <td>
+            <form class="inline-edit" method="post">
+              {{ csrf() }}<input type="hidden" name="action" value="rename"><input type="hidden" name="id" value="{{ c.id }}">
+              <input type="text" name="name" value="{{ c.name }}" class="compact" required aria-label="Название типа">
+              <button class="btn btn-sm btn-ghost">Сохранить</button>
+            </form>
+          </td>
+          <td class="num"><a href="{{ url_for('warehouse.index', category=c.id) }}">{{ c.parts }}</a></td>
+          <td class="actions-cell">
+            <form class="inline" method="post">{{ csrf() }}<input type="hidden" name="action" value="up"><input type="hidden" name="id" value="{{ c.id }}"><button class="btn btn-sm btn-ghost btn-icon" title="Выше" {{ 'disabled' if loop.first }}>▲</button></form>
+            <form class="inline" method="post">{{ csrf() }}<input type="hidden" name="action" value="down"><input type="hidden" name="id" value="{{ c.id }}"><button class="btn btn-sm btn-ghost btn-icon" title="Ниже" {{ 'disabled' if loop.last }}>▼</button></form>
+            <form class="inline" method="post" data-confirm="Удалить тип «{{ c.name }}»?{% if c.parts %} {{ c.parts }} поз. останутся на складе без типа.{% endif %}">{{ csrf() }}<input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ c.id }}"><button class="btn btn-sm btn-ghost btn-icon" title="Удалить">{{ icon('trash') }}</button></form>
+          </td>
+        </tr>
+      {% endfor %}
+      {% if without %}
+        <tr class="row-muted"><td>Без типа</td><td class="num"><a href="{{ url_for('warehouse.index', category='none') }}">{{ without }}</a></td><td></td></tr>
+      {% endif %}
+      </tbody>
+    </table>
+  </div>
+  <form class="card-foot inline-edit" method="post">
+    {{ csrf() }}<input type="hidden" name="action" value="add">
+    <input type="text" name="name" class="compact" placeholder="Новый тип" required aria-label="Название нового типа">
+    <button class="btn btn-sm btn-primary">{{ icon('plus') }}Добавить тип</button>
+  </form>
+</div>
+{% endblock %}

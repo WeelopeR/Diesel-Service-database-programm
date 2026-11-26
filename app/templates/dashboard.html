@@ -76,7 +76,7 @@
 
   <div class="stack">
     <div class="card">
-      <div class="card-head"><h2>Заканчивается на складе</h2><a class="small" href="{{ url_for('warehouse.index', show='low') }}">Все</a></div>
+      <div class="card-head"><h2>Заканчивается на складе</h2><a class="small" href="{{ url_for('warehouse.index', stock='low') }}">Все</a></div>
       {% if low_stock %}
       <table class="table">
         <tbody>

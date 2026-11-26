@@ -1,6 +1,7 @@
 """Справочники, форматирование и разбор данных форм."""
 
 import calendar
+import math
 from datetime import date, datetime
 
 from flask import request
@@ -232,6 +233,14 @@ def fmt_order_no(value, year=None):
     if year and int(year) != current_year():
         return order_label(number, year)
     return str(number)
+
+
+def price_with_markup(purchase_price, markup_percent):
+    """Цена продажи по наценке, округлённая до сотни (но не меньше 100 ₽)."""
+    raw = float(purchase_price or 0) * (1 + float(markup_percent or 0) / 100)
+    if raw <= 0:
+        return 0.0
+    return float(max(100, math.floor(raw / 100 + 0.5) * 100))
 
 
 def like(text):

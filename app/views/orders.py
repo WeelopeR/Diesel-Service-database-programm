@@ -318,7 +318,9 @@ def view(order_id):
         "ORDER BY COALESCE(NULLIF(category, ''), 'яяя'), name COLLATE NOCASE"
     )
     catalog_parts = db.query(
-        "SELECT * FROM parts WHERE is_active = 1 ORDER BY name COLLATE NOCASE"
+        "SELECT p.*, pc.name AS category_name FROM parts p "
+        "LEFT JOIN part_categories pc ON pc.id = p.category_id WHERE p.is_active = 1 "
+        "ORDER BY COALESCE(pc.position, 9999), p.name COLLATE NOCASE"
     )
     all_masters = masters()
     default_master = order["responsible_id"] if any(
