@@ -236,11 +236,15 @@ def fmt_order_no(value, year=None):
 
 
 def price_with_markup(purchase_price, markup_percent):
-    """Цена продажи по наценке, округлённая до сотни (но не меньше 100 ₽)."""
-    raw = float(purchase_price or 0) * (1 + float(markup_percent or 0) / 100)
+    """Цена продажи по наценке: от 100 ₽ — всегда вверх до сотни (1 521 → 1 600),
+    дешевле 100 ₽ — не округляется (только до копеек)."""
+    # Сначала до копеек, чтобы 1000 × 1,3 = 1300,0000000002 не превратилось в 1400.
+    raw = money_round(float(purchase_price or 0) * (1 + float(markup_percent or 0) / 100))
     if raw <= 0:
         return 0.0
-    return float(max(100, math.floor(raw / 100 + 0.5) * 100))
+    if raw < 100:
+        return raw
+    return float(math.ceil(raw / 100) * 100)
 
 
 def plural(n, one, few, many):

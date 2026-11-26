@@ -58,7 +58,7 @@
 </form>
 <script>
 (function () {
-  // Цена продажи = закупка × (1 + наценка/100), округлённая до сотни (не меньше 100 ₽).
+  // Цена продажи = закупка × (1 + наценка/100): от 100 ₽ — вверх до сотни, дешевле — без округления.
   var purchase = document.getElementById("purchase_price");
   var markup = document.getElementById("markup_percent");
   var sale = document.getElementById("sale_price");
@@ -71,13 +71,15 @@
       hint.textContent = "Наценка не указана — цену можно ввести вручную";
       return;
     }
-    var raw = p * (1 + m / 100);
-    var price = raw > 0 ? Math.max(100, Math.floor(raw / 100 + 0.5) * 100) : 0;
+    var raw = Math.round(p * (1 + m / 100) * 100) / 100;
+    var price = raw <= 0 ? 0 : (raw < 100 ? raw : Math.ceil(raw / 100) * 100);
     sale.value = price;
     sale.readOnly = true;
-    hint.textContent = raw > 0
-      ? "Рассчитано: " + raw.toLocaleString("ru-RU", {maximumFractionDigits: 2}) + " ₽ → округлено до сотни"
-      : "Укажите цену закупки";
+    var shown = raw.toLocaleString("ru-RU", {maximumFractionDigits: 2}) + " ₽";
+    hint.textContent = raw <= 0 ? "Укажите цену закупки"
+      : raw < 100 ? "Рассчитано: " + shown + " — до 100 ₽ цена не округляется"
+      : raw === price ? "Рассчитано: " + shown + " — уже ровно до сотни"
+      : "Рассчитано: " + shown + " → округлено вверх до сотни";
   }
   purchase.addEventListener("input", update);
   markup.addEventListener("input", update);
