@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Склад{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Склад</h1><div class="sub">Запчасти и материалы</div></div>
+  <div class="actions">
+    <a class="btn btn-primary" href="{{ url_for('warehouse.receipt') }}">{{ icon('plus') }}Приход товара</a>
+    <a class="btn" href="{{ url_for('warehouse.create') }}">Новая позиция</a>
+    <a class="btn btn-ghost" href="{{ url_for('warehouse.movements') }}">Движение</a>
+  </div>
+</div>
+<div class="kpis">
+  <div class="kpi"><div class="kpi-label">Позиций</div><div class="kpi-value">{{ totals.positions }}</div></div>
+  <div class="kpi"><div class="kpi-label">Остатки по закупке</div><div class="kpi-value">{{ totals.cost|money }}</div></div>
+  <div class="kpi"><div class="kpi-label">Остатки по продаже</div><div class="kpi-value">{{ totals.retail|money }}</div></div>
+  <a class="kpi" href="{{ url_for('warehouse.index', show='low') }}"><div class="kpi-label">Заканчиваются</div><div class="kpi-value {{ 'text-danger' if totals.low }}">{{ totals.low or 0 }}</div><div class="kpi-note">остаток ≤ минимума</div></a>
+</div>
+<form class="toolbar" method="get">
+  <input class="search" type="search" name="q" value="{{ q }}" placeholder="Наименование, артикул, бренд, место">
+  <input type="hidden" name="show" value="{{ show }}">
+  <button class="btn">Найти</button>
+  <div class="pills">
+    <a class="pill {{ 'active' if show == 'active' }}" href="{{ url_for('warehouse.index', q=q) }}">Действующие</a>
+    <a class="pill {{ 'active' if show == 'low' }}" href="{{ url_for('warehouse.index', show='low', q=q) }}">Заканчиваются</a>
+    <a class="pill {{ 'active' if show == 'archived' }}" href="{{ url_for('warehouse.index', show='archived', q=q) }}">Архив</a>
+  </div>
+</form>
+<div class="card">
+  {% if page.rows %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Артикул</th><th>Наименование</th><th class="hide-sm">Место</th><th class="num">Остаток</th><th class="num hide-sm">Закупка</th><th class="num">Продажа</th></tr></thead>
+      <tbody>
+      {% for p in page.rows %}
+        {% set low = p.min_quantity and p.quantity <= p.min_quantity %}
+        <tr data-href="{{ url_for('warehouse.view', part_id=p.id) }}" class="{{ 'row-muted' if not p.is_active }}">
+          <td class="nowrap">{{ p.sku or '—' }}</td>
+          <td><a href="{{ url_for('warehouse.view', part_id=p.id) }}" class="strong">{{ p.name }}</a>{% if p.brand %}<div class="muted small">{{ p.brand }}</div>{% endif %}</td>
+          <td class="hide-sm">{{ p.location or '' }}</td>
+          <td class="num">{% if low %}<span class="badge badge-danger">{{ p.quantity|qty }} {{ p.unit }}</span>{% elif p.quantity <= 0 %}<span class="muted">0 {{ p.unit }}</span>{% else %}{{ p.quantity|qty }} {{ p.unit }}{% endif %}</td>
+          <td class="num hide-sm">{{ p.purchase_price|money }}</td>
+          <td class="num strong">{{ p.sale_price|money }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ pagination(page, 'warehouse.index') }}
+  {% else %}
+  <div class="empty">{% if q or show != 'active' %}Ничего не найдено.{% else %}Склад пуст. <a href="{{ url_for('warehouse.create') }}">Добавьте первую позицию</a>.{% endif %}</div>
+  {% endif %}
+</div>
+{% endblock %}

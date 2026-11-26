@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}{{ 'Заказ-наряд № ' ~ order.id|order_no if edit else 'Новый заказ-наряд' }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('orders.index') }}">Заказ-наряды</a>{% if edit %} / <a href="{{ url_for('orders.view', order_id=order.id) }}">№ {{ order.id|order_no }}</a>{% endif %}</div>
+<div class="page-head">
+  <div>
+    <h1>{{ 'Редактирование заказ-наряда № ' ~ order.id|order_no if edit else 'Новый заказ-наряд' }}</h1>
+    <div class="sub">Клиент: <a href="{{ url_for('clients.view', client_id=client.id) }}">{{ client.name }}</a>{% if client.phone %} · {{ client.phone }}{% endif %}{% if not edit %} · <a href="{{ url_for('orders.create') }}">выбрать другого</a>{% endif %}</div>
+  </div>
+</div>
+<form method="post" class="stack" style="max-width: 980px;">
+  {{ csrf() }}
+  <input type="hidden" name="client_id" value="{{ client.id }}">
+  <div class="card">
+    <div class="card-head"><h2>Техника</h2></div>
+    <div class="card-body stack">
+      <div class="field">
+        <label for="vehicle_id">Выберите технику клиента</label>
+        <select id="vehicle_id" name="vehicle_id" data-vehicle-select="new-vehicle">
+          {% for v in vehicles %}<option value="{{ v.id }}" {{ 'selected' if preselect_vehicle == v.id or (not edit and not preselect_vehicle and loop.first) }}>{{ v|vehicle }}{% if v.vin %} · VIN {{ v.vin }}{% endif %}</option>{% endfor %}
+          <option value="new" {{ 'selected' if not vehicles and not edit }}>+ Новая техника</option>
+          <option value="" {{ 'selected' if edit and not preselect_vehicle }}>Без техники (агрегат принят отдельно)</option>
+        </select>
+      </div>
+      <div id="new-vehicle" hidden>
+        {% set prefix = 'v_' %}{% set vehicle = {} %}
+        {% include "clients/_vehicle_fields.html" %}
+      </div>
+      <div class="form-grid form-grid-3">
+        <div class="field"><label for="mileage">Пробег / моточасы</label><input type="text" inputmode="numeric" id="mileage" name="mileage" value="{{ order.mileage or '' }}"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Приём в работу</h2></div>
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="field full"><label for="complaint">Неисправность со слов клиента</label><textarea id="complaint" name="complaint" rows="3" placeholder="Не заводится, дымит, троит, плохо тянет…">{{ order.complaint or '' }}</textarea></div>
+        <div class="field full"><label for="units">Принятые агрегаты и комплектность</label><textarea id="units" name="units" rows="3" placeholder="Форсунки Bosch 0445110… — 4 шт., № …; ТНВД …">{{ order.units or '' }}</textarea><div class="hint">Номера форсунок, ТНВД, серийные номера — чтобы при выдаче не было вопросов.</div></div>
+        {% if edit %}
+        <div class="field full"><label for="diagnosis">Результат диагностики</label><textarea id="diagnosis" name="diagnosis" rows="3">{{ order.diagnosis or '' }}</textarea></div>
+        <div class="field full"><label for="recommendations">Рекомендации клиенту</label><textarea id="recommendations" name="recommendations" rows="2">{{ order.recommendations or '' }}</textarea></div>
+        {% endif %}
+        <div class="field">
+          <label for="responsible_id">Ответственный</label>
+          <select id="responsible_id" name="responsible_id">
+            <option value="">—</option>
+            {% for e in staff %}<option value="{{ e.id }}" {{ 'selected' if order.responsible_id == e.id }}>{{ e.full_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field"><label for="planned_date">Плановая дата готовности</label><input type="date" id="planned_date" name="planned_date" value="{{ order.planned_date or '' }}"></div>
+        <div class="field full"><label for="notes">Внутренние заметки</label><textarea id="notes" name="notes" rows="2" placeholder="Клиенту не видны, в печать не попадают">{{ order.notes or '' }}</textarea></div>
+      </div>
+    </div>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary">{{ 'Сохранить' if edit else 'Создать заказ-наряд' }}</button>
+    <a class="btn btn-ghost" href="{{ url_for('orders.view', order_id=order.id) if edit else url_for('orders.index') }}">Отмена</a>
+  </div>
+</form>
+{% endblock %}

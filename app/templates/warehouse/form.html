@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}{{ 'Редактирование позиции' if edit else 'Новая позиция склада' }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('warehouse.index') }}">Склад</a>{% if edit %} / <a href="{{ url_for('warehouse.view', part_id=part.id) }}">{{ part.name }}</a>{% endif %}</div>
+<div class="page-head"><h1>{{ 'Редактирование позиции' if edit else 'Новая позиция склада' }}</h1></div>
+<form method="post" class="card" style="max-width: 860px;">
+  {{ csrf() }}
+  <div class="card-body">
+    <div class="form-grid form-grid-3">
+      <div class="field full"><label for="name">Наименование *</label><input type="text" id="name" name="name" value="{{ part.name or '' }}" required autofocus placeholder="Например: Распылитель DLLA 150 P 1622"></div>
+      <div class="field"><label for="sku">Артикул</label><input type="text" id="sku" name="sku" value="{{ part.sku or '' }}"></div>
+      <div class="field"><label for="brand">Производитель</label><input type="text" id="brand" name="brand" value="{{ part.brand or '' }}" placeholder="Bosch, Denso, Delphi…"></div>
+      <div class="field"><label for="unit">Ед. изм.</label><input type="text" id="unit" name="unit" value="{{ part.unit or 'шт' }}" list="units"><datalist id="units"><option value="шт"><option value="компл"><option value="л"><option value="кг"><option value="м"></datalist></div>
+      <div class="field"><label for="purchase_price">Цена закупки, ₽</label><input type="text" inputmode="decimal" id="purchase_price" name="purchase_price" value="{{ part.purchase_price|num }}"></div>
+      <div class="field"><label for="sale_price">Цена продажи, ₽</label><input type="text" inputmode="decimal" id="sale_price" name="sale_price" value="{{ part.sale_price|num }}"></div>
+      <div class="field"><label for="min_quantity">Минимальный остаток</label><input type="text" inputmode="decimal" id="min_quantity" name="min_quantity" value="{{ part.min_quantity|num }}"><div class="hint">Предупредим, когда останется столько или меньше</div></div>
+      <div class="field"><label for="location">Место хранения</label><input type="text" id="location" name="location" value="{{ part.location or '' }}" placeholder="Стеллаж 2, полка 3"></div>
+      {% if not edit %}
+      <div class="field"><label for="initial_quantity">Начальный остаток</label><input type="text" inputmode="decimal" id="initial_quantity" name="initial_quantity" value=""><div class="hint">Сколько уже лежит на складе</div></div>
+      {% else %}
+      <div class="field"><span class="label">Текущий остаток</span><div style="padding-top: 8px;"><strong>{{ part.quantity|qty }} {{ part.unit }}</strong> · <a href="{{ url_for('warehouse.writeoff', part_id=part.id) }}">изменить</a></div></div>
+      {% endif %}
+      <div class="field full"><label for="notes">Примечание / применяемость</label><textarea id="notes" name="notes" rows="2">{{ part.notes or '' }}</textarea></div>
+      <div class="field full"><label class="check"><input type="checkbox" name="is_active" value="1" {{ 'checked' if part.is_active }}>Позиция используется (снимите галочку, чтобы убрать в архив)</label></div>
+    </div>
+  </div>
+  <div class="card-foot form-actions" style="margin-top: 0;">
+    <button class="btn btn-primary">Сохранить</button>
+    {% if not edit %}<button class="btn" name="add_more" value="1">Сохранить и добавить ещё</button>{% endif %}
+    <a class="btn btn-ghost" href="{{ url_for('warehouse.view', part_id=part.id) if edit else url_for('warehouse.index') }}">Отмена</a>
+  </div>
+</form>
+{% endblock %}

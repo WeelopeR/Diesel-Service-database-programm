@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Списание — {{ part.name }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('warehouse.index') }}">Склад</a> / <a href="{{ url_for('warehouse.view', part_id=part.id) }}">{{ part.name }}</a></div>
+<div class="page-head"><div><h1>Изменение остатка</h1><div class="sub">{{ part.name }} · сейчас на складе <strong>{{ part.quantity|qty }} {{ part.unit }}</strong></div></div></div>
+<div class="grid grid-2" style="max-width: 900px;">
+  <form method="post" class="card">
+    {{ csrf() }}
+    <input type="hidden" name="mode" value="writeoff">
+    <div class="card-head"><h2>Списание</h2></div>
+    <div class="card-body stack">
+      <p class="muted">Брак, порча, использовано на собственные нужды.</p>
+      <div class="field"><label for="quantity">Количество, {{ part.unit }}</label><input type="text" inputmode="decimal" id="quantity" name="quantity" required></div>
+      <div class="field"><label for="note">Причина</label><input type="text" id="note" name="note" placeholder="Брак при установке"></div>
+      <button class="btn btn-danger">Списать</button>
+    </div>
+  </form>
+  <form method="post" class="card">
+    {{ csrf() }}
+    <input type="hidden" name="mode" value="adjust">
+    <div class="card-head"><h2>Инвентаризация</h2></div>
+    <div class="card-body stack">
+      <p class="muted">Укажите, сколько фактически лежит на складе — программа запишет разницу.</p>
+      <div class="field"><label for="actual">Фактический остаток, {{ part.unit }}</label><input type="text" inputmode="decimal" id="actual" name="actual" value="{{ part.quantity|num }}" required></div>
+      <div class="field"><label for="note2">Комментарий</label><input type="text" id="note2" name="note" placeholder="Инвентаризация"></div>
+      <button class="btn btn-primary">Сохранить остаток</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

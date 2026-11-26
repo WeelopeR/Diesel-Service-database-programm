@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Заказ-наряды{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Заказ-наряды</h1></div>
+  {% if has_role('admin', 'manager') %}<div class="actions"><a class="btn btn-primary" href="{{ url_for('orders.create') }}">{{ icon('plus') }}Новый заказ-наряд</a></div>{% endif %}
+</div>
+<form class="toolbar" method="get">
+  <input type="hidden" name="status" value="{{ status }}">
+  <input class="search" type="search" name="q" value="{{ q }}" placeholder="№, клиент, телефон, госномер, VIN, агрегат">
+  <select name="master" style="width: auto;" onchange="this.form.submit()">
+    <option value="">Все мастера</option>
+    {% for m in masters %}<option value="{{ m.id }}" {{ 'selected' if master_id == m.id }}>{{ m.full_name }}</option>{% endfor %}
+  </select>
+  <button class="btn">Найти</button>
+  {% if q or master_id %}<a class="btn btn-ghost" href="{{ url_for('orders.index', status=status) }}">Сбросить</a>{% endif %}
+</form>
+<div class="toolbar">
+  <div class="pills">
+    {% set active_count = counts.get('new', 0) + counts.get('diagnostics', 0) + counts.get('in_progress', 0) + counts.get('waiting_parts', 0) + counts.get('done', 0) %}
+    <a class="pill {{ 'active' if status == 'active' }}" href="{{ url_for('orders.index', q=q, master=master_id) }}">Открытые<span class="count">{{ active_count }}</span></a>
+    {% for k, v in ORDER_STATUSES.items() %}
+    <a class="pill {{ 'active' if status == k }}" href="{{ url_for('orders.index', status=k, q=q, master=master_id) }}">{{ v }}<span class="count">{{ counts.get(k, 0) }}</span></a>
+    {% endfor %}
+    <a class="pill {{ 'active' if status == 'debt' }}" href="{{ url_for('orders.index', status='debt', q=q, master=master_id) }}">С долгом</a>
+    <a class="pill {{ 'active' if status == 'all' }}" href="{{ url_for('orders.index', status='all', q=q, master=master_id) }}">Все</a>
+  </div>
+</div>
+<div class="card">
+  {% if page.rows %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>№</th><th>Дата</th><th>Клиент</th><th>Техника</th><th>Статус</th><th class="hide-sm">Ответственный</th><th class="num">Сумма</th><th class="num hide-sm">Оплачено</th></tr></thead>
+      <tbody>
+      {% for o in page.rows %}
+        {% set due = o.total - o.paid %}
+        <tr data-href="{{ url_for('orders.view', order_id=o.id) }}">
+          <td><a class="strong" href="{{ url_for('orders.view', order_id=o.id) }}">{{ o.id|order_no }}</a></td>
+          <td class="nowrap">{{ o.created_at|date }}</td>
+          <td>{{ o.client_name }}<div class="muted small">{{ o.client_phone or '' }}</div></td>
+          <td>{{ o|vehicle if o.make or o.model or o.plate else '—' }}</td>
+          <td>{{ status_badge(o.status) }}</td>
+          <td class="hide-sm">{{ o.responsible_name or '—' }}</td>
+          <td class="num">{{ o.total|money }}</td>
+          <td class="num hide-sm">{% if o.status == 'cancelled' %}—{% elif due > 0.009 %}<span class="{{ 'text-danger' if o.status == 'issued' }}">{{ o.paid|money }}</span>{% else %}<span class="badge badge-success">оплачен</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ pagination(page, 'orders.index') }}
+  {% else %}
+  <div class="empty">Заказ-нарядов не найдено.{% if has_role('admin', 'manager') and not q %} <a href="{{ url_for('orders.create') }}">Создать новый</a>.{% endif %}</div>
+  {% endif %}
+</div>
+{% endblock %}

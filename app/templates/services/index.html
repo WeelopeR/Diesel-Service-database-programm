@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Услуги{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Услуги и цены</h1><div class="sub">{{ total }} в списке{% if has_role('admin') %} · процент мастеру используется для расчёта зарплаты{% endif %}</div></div>
+  {% if has_role('admin') %}<div class="actions"><a class="btn btn-primary" href="{{ url_for('services.create') }}">{{ icon('plus') }}Новая услуга</a></div>{% endif %}
+</div>
+<form class="toolbar" method="get">
+  <input class="search" type="search" name="q" value="{{ q }}" placeholder="Поиск по названию или категории">
+  <input type="hidden" name="show" value="{{ show }}">
+  <button class="btn">Найти</button>
+  <div class="pills">
+    <a class="pill {{ 'active' if show == 'active' }}" href="{{ url_for('services.index', q=q) }}">Действующие</a>
+    <a class="pill {{ 'active' if show == 'archived' }}" href="{{ url_for('services.index', show='archived', q=q) }}">Архив</a>
+    <a class="pill {{ 'active' if show == 'all' }}" href="{{ url_for('services.index', show='all', q=q) }}">Все</a>
+  </div>
+</form>
+{% if groups %}
+{% for category, items in groups.items() %}
+<div class="card">
+  <div class="card-head"><h2>{{ category }}</h2><span class="muted small">{{ items|length }}</span></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Услуга</th><th class="num">Цена</th>{% if has_role('admin') %}<th class="num">% мастеру</th><th class="num hide-sm">Мастеру, ₽</th><th></th>{% endif %}</tr></thead>
+      <tbody>
+      {% for s in items %}
+        <tr class="{{ 'row-muted' if not s.is_active }}">
+          <td>{{ s.name }}{% if not s.is_active %} <span class="badge">архив</span>{% endif %}{% if s.notes %}<div class="muted small">{{ s.notes }}</div>{% endif %}</td>
+          <td class="num strong">{{ s.price|money }}</td>
+          {% if has_role('admin') %}
+          <td class="num">{{ s.master_percent|qty }}%</td>
+          <td class="num hide-sm muted">{{ (s.price * s.master_percent / 100)|money }}</td>
+          <td class="actions-cell">
+            <a class="btn btn-sm btn-ghost btn-icon" title="Изменить" href="{{ url_for('services.edit', service_id=s.id) }}">{{ icon('edit') }}</a>
+            <form class="inline" method="post" action="{{ url_for('services.delete', service_id=s.id) }}" data-confirm="Удалить услугу «{{ s.name }}»?">{{ csrf() }}<button class="btn btn-sm btn-ghost btn-icon" title="Удалить">{{ icon('trash') }}</button></form>
+          </td>
+          {% endif %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="card"><div class="empty">{% if q %}Ничего не найдено.{% else %}Список услуг пуст.{% if has_role('admin') %} <a href="{{ url_for('services.create') }}">Добавьте первую услугу</a>.{% endif %}{% endif %}</div></div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}{{ part.name }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('warehouse.index') }}">Склад</a></div>
+<div class="page-head">
+  <div>
+    <h1>{{ part.name }}</h1>
+    <div class="sub">{% if part.sku %}Арт. {{ part.sku }} · {% endif %}{{ part.brand or '' }}{% if not part.is_active %} · <span class="badge">архив</span>{% endif %}</div>
+  </div>
+  <div class="actions">
+    <a class="btn btn-primary" href="{{ url_for('warehouse.receipt', part_id=part.id) }}">{{ icon('plus') }}Приход</a>
+    <a class="btn" href="{{ url_for('warehouse.writeoff', part_id=part.id) }}">Списание / инвентаризация</a>
+    <a class="btn" href="{{ url_for('warehouse.edit', part_id=part.id) }}">{{ icon('edit') }}Изменить</a>
+    {% if has_role('admin') %}
+    <form class="inline" method="post" action="{{ url_for('warehouse.delete', part_id=part.id) }}" data-confirm="Удалить позицию? Если она уже использовалась, она будет перенесена в архив.">{{ csrf() }}<button class="btn btn-danger">{{ icon('trash') }}</button></form>
+    {% endif %}
+  </div>
+</div>
+<div class="kpis">
+  <div class="kpi"><div class="kpi-label">Остаток</div><div class="kpi-value {{ 'text-danger' if part.min_quantity and part.quantity <= part.min_quantity }}">{{ part.quantity|qty }} {{ part.unit }}</div><div class="kpi-note">{% if part.min_quantity %}минимум {{ part.min_quantity|qty }}{% else %}минимум не задан{% endif %}</div></div>
+  <div class="kpi"><div class="kpi-label">Цена закупки</div><div class="kpi-value">{{ part.purchase_price|money }}</div></div>
+  <div class="kpi"><div class="kpi-label">Цена продажи</div><div class="kpi-value">{{ part.sale_price|money }}</div>{% if part.purchase_price %}<div class="kpi-note">наценка {{ ((part.sale_price / part.purchase_price - 1) * 100)|round|int }}%</div>{% endif %}</div>
+  <div class="kpi"><div class="kpi-label">Место</div><div class="kpi-value" style="font-size: 16px;">{{ part.location or '—' }}</div></div>
+</div>
+{% if part.notes %}<div class="card"><div class="card-body pre">{{ part.notes }}</div></div>{% endif %}
+<div class="card">
+  <div class="card-head"><h2>История движения</h2></div>
+  {% if movements %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Дата</th><th>Операция</th><th class="num">Кол-во</th><th class="num hide-sm">Цена</th><th>Комментарий</th><th class="hide-sm">Сотрудник</th></tr></thead>
+      <tbody>
+      {% for m in movements %}
+        <tr>
+          <td class="nowrap">{{ m.created_at|datetime }}</td>
+          <td>{{ STOCK_KINDS[m.kind] }}</td>
+          <td class="num {{ 'text-success' if m.quantity > 0 else 'text-danger' }}">{{ '+' if m.quantity > 0 }}{{ m.quantity|qty }}</td>
+          <td class="num hide-sm">{{ m.price|money if m.price else '' }}</td>
+          <td>{% if m.order_id %}<a href="{{ url_for('orders.view', order_id=m.order_id) }}">{{ m.note or ('Заказ-наряд № ' ~ m.order_id|order_no) }}</a>{% else %}{{ m.note or '' }}{% endif %}{% if m.supplier %}<div class="muted small">Поставщик: {{ m.supplier }}</div>{% endif %}</td>
+          <td class="hide-sm">{{ m.employee_name or '' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">Движений пока не было.</div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Доходы и расходы{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Доходы и расходы</h1><div class="sub">{{ start|date }} — {{ end|date }}</div></div>
+  <div class="actions">
+    <a class="btn btn-success" href="{{ url_for('finance.create', kind='income') }}">{{ icon('plus') }}Доход</a>
+    <a class="btn btn-danger" href="{{ url_for('finance.create', kind='expense') }}">{{ icon('plus') }}Расход</a>
+    <a class="btn btn-ghost" href="{{ url_for('finance.report') }}">Отчёт по месяцам</a>
+  </div>
+</div>
+{{ period_filter('finance.index', start, end, presets, extra={'kind': kind, 'category': category, 'method': method}) }}
+
+<div class="kpis">
+  <div class="kpi"><div class="kpi-label">Доходы</div><div class="kpi-value text-success">{{ income|money }}</div></div>
+  <div class="kpi"><div class="kpi-label">Расходы</div><div class="kpi-value text-danger">{{ expense|money }}</div></div>
+  <div class="kpi"><div class="kpi-label">Прибыль</div><div class="kpi-value {{ 'text-danger' if profit < 0 }}">{{ profit|money }}</div></div>
+</div>
+
+<div class="grid grid-main">
+  <div class="card">
+    <div class="card-head">
+      <h2>Операции</h2>
+      <form class="toolbar" method="get" style="margin: 0;">
+        <input type="hidden" name="start" value="{{ start.isoformat() }}"><input type="hidden" name="end" value="{{ end.isoformat() }}">
+        <select name="kind" class="compact" style="width: auto;" onchange="this.form.submit()"><option value="">Все</option><option value="income" {{ 'selected' if kind == 'income' }}>Доходы</option><option value="expense" {{ 'selected' if kind == 'expense' }}>Расходы</option></select>
+        <select name="category" class="compact" style="width: auto;" onchange="this.form.submit()"><option value="">Все статьи</option>{% for c in categories %}<option {{ 'selected' if category == c }}>{{ c }}</option>{% endfor %}</select>
+        <select name="method" class="compact" style="width: auto;" onchange="this.form.submit()"><option value="">Любой способ</option>{% for k, v in PAYMENT_METHODS.items() %}<option value="{{ k }}" {{ 'selected' if method == k }}>{{ v }}</option>{% endfor %}</select>
+      </form>
+    </div>
+    {% if rows %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Дата</th><th>Статья</th><th>Описание</th><th class="hide-sm">Способ</th><th class="num">Сумма</th><th></th></tr></thead>
+        <tbody>
+        {% for t in rows %}
+          <tr>
+            <td class="nowrap">{{ t.date|date }}</td>
+            <td>{{ t.category }}</td>
+            <td class="wrap">{% if t.order_id %}<a href="{{ url_for('orders.view', order_id=t.order_id) }}">{{ t.description or ('Заказ-наряд № ' ~ t.order_id|order_no) }}</a>{% else %}{{ t.description or '' }}{% endif %}{% if t.employee_name and not t.order_id and t.employee_name not in (t.description or '') %}<div class="muted small">Сотрудник: {{ t.employee_name }}</div>{% endif %}</td>
+            <td class="hide-sm">{{ PAYMENT_METHODS[t.method] }}</td>
+            <td class="num strong {{ 'text-success' if t.kind == 'income' else 'text-danger' }}">{{ '+' if t.kind == 'income' else '−' }}{{ t.amount|money }}</td>
+            <td class="actions-cell">
+              <a class="btn btn-sm btn-ghost btn-icon" title="Изменить" href="{{ url_for('finance.edit', tx_id=t.id) }}">{{ icon('edit') }}</a>
+              <form class="inline" method="post" action="{{ url_for('finance.delete', tx_id=t.id) }}" data-confirm="Удалить запись на {{ t.amount|money }}?">{{ csrf() }}<button class="btn btn-sm btn-ghost btn-icon" title="Удалить">{{ icon('trash') }}</button></form>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">За выбранный период операций нет.</div>
+    {% endif %}
+  </div>
+
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>По способам оплаты</h2></div>
+      <table class="table compact">
+        <thead><tr><th></th><th class="num">Приход</th><th class="num">Расход</th><th class="num">Итого</th></tr></thead>
+        <tbody>
+        {% for m, label in PAYMENT_METHODS.items() %}{% set r = by_method.get(m) %}
+          <tr><td>{{ label }}</td><td class="num text-success">{{ (r.income if r else 0)|money }}</td><td class="num text-danger">{{ (r.expense if r else 0)|money }}</td><td class="num strong">{{ (r.balance if r else 0)|money }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% for k, title in [('income', 'Доходы по статьям'), ('expense', 'Расходы по статьям')] %}
+    {% set items = summary|selectattr('kind', 'equalto', k)|list %}
+    <div class="card">
+      <div class="card-head"><h2>{{ title }}</h2></div>
+      {% if items %}
+      <table class="table">
+        <tbody>
+        {% for r in items %}
+          <tr><td><a href="{{ url_for('finance.index', start=start.isoformat(), end=end.isoformat(), category=r.category) }}">{{ r.category }}</a><div class="muted small">{{ r.n }} опер.</div></td><td class="num strong">{{ r.total|money }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">Нет данных</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Движение по складу{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('warehouse.index') }}">Склад</a></div>
+<div class="page-head"><h1>Движение по складу</h1><div class="actions"><a class="btn btn-primary" href="{{ url_for('warehouse.receipt') }}">{{ icon('plus') }}Приход товара</a></div></div>
+<div class="toolbar">
+  <div class="pills">
+    <a class="pill {{ 'active' if not kind }}" href="{{ url_for('warehouse.movements') }}">Все</a>
+    {% for k, v in STOCK_KINDS.items() %}<a class="pill {{ 'active' if kind == k }}" href="{{ url_for('warehouse.movements', kind=k) }}">{{ v }}</a>{% endfor %}
+  </div>
+</div>
+<div class="card">
+  {% if page.rows %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Дата</th><th>Позиция</th><th>Операция</th><th class="num">Кол-во</th><th class="num hide-sm">Цена</th><th>Комментарий</th><th class="hide-sm">Сотрудник</th></tr></thead>
+      <tbody>
+      {% for m in page.rows %}
+        <tr>
+          <td class="nowrap">{{ m.created_at|datetime }}</td>
+          <td><a href="{{ url_for('warehouse.view', part_id=m.part_id) }}">{{ m.part_name }}</a>{% if m.sku %}<div class="muted small">{{ m.sku }}</div>{% endif %}</td>
+          <td>{{ STOCK_KINDS[m.kind] }}</td>
+          <td class="num {{ 'text-success' if m.quantity > 0 else 'text-danger' }}">{{ '+' if m.quantity > 0 }}{{ m.quantity|qty }} {{ m.unit }}</td>
+          <td class="num hide-sm">{{ m.price|money if m.price else '' }}</td>
+          <td>{% if m.order_id %}<a href="{{ url_for('orders.view', order_id=m.order_id) }}">{{ m.note or ('Заказ-наряд № ' ~ m.order_id|order_no) }}</a>{% else %}{{ m.note or '' }}{% endif %}{% if m.supplier %}<div class="muted small">Поставщик: {{ m.supplier }}</div>{% endif %}</td>
+          <td class="hide-sm">{{ m.employee_name or '' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ pagination(page, 'warehouse.movements') }}
+  {% else %}
+  <div class="empty">Движений пока нет.</div>
+  {% endif %}
+</div>
+{% endblock %}

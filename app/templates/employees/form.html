@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}{{ emp.full_name if edit else 'Новый сотрудник' }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('employees.index') }}">Сотрудники</a></div>
+<div class="page-head">
+  <h1>{{ emp.full_name if edit else 'Новый сотрудник' }}</h1>
+  {% if edit and emp.is_master %}<div class="actions"><a class="btn" href="{{ url_for('salary.detail', employee_id=emp.id) }}">{{ icon('salary') }}Зарплата</a></div>{% endif %}
+</div>
+<form method="post" class="stack" style="max-width: 760px;" autocomplete="off">
+  {{ csrf() }}
+  <div class="card">
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="field full"><label for="full_name">ФИО *</label><input type="text" id="full_name" name="full_name" value="{{ emp.full_name or '' }}" required autofocus></div>
+        <div class="field"><label for="position">Должность</label><input type="text" id="position" name="position" value="{{ emp.position or '' }}" placeholder="Мастер-дизелист, приёмщик…"></div>
+        <div class="field"><label for="phone">Телефон</label><input type="tel" id="phone" name="phone" value="{{ emp.phone or '' }}"></div>
+        <div class="field full"><label class="check"><input type="checkbox" name="is_master" value="1" {{ 'checked' if emp.is_master }}>Выполняет работы (можно назначать в заказ-нарядах, начисляется зарплата)</label></div>
+        <div class="field full"><label class="check"><input type="checkbox" name="is_active" value="1" {{ 'checked' if emp.is_active }}>Работает (снимите галочку при увольнении — история сохранится)</label></div>
+        <div class="field full"><label for="notes">Заметки</label><textarea id="notes" name="notes" rows="2">{{ emp.notes or '' }}</textarea></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Доступ к программе</h2><span class="muted small">оставьте логин пустым, если сотруднику вход не нужен</span></div>
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="field full">
+          <label for="role">Права</label>
+          <select id="role" name="role">{% for k, v in ROLES.items() %}<option value="{{ k }}" {{ 'selected' if emp.role == k }}>{{ v }}</option>{% endfor %}</select>
+        </div>
+        <div class="field"><label for="username">Логин</label><input type="text" id="username" name="username" value="{{ emp.username or '' }}" autocomplete="off"></div>
+        <div class="field">
+          <label for="password">{{ 'Новый пароль' if edit and emp.password_hash else 'Пароль' }}</label>
+          <input type="password" id="password" name="password" autocomplete="new-password" minlength="6">
+          <div class="hint">{{ 'Оставьте пустым, чтобы не менять' if edit and emp.password_hash else 'Не короче 6 символов' }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary">Сохранить</button>
+    <a class="btn btn-ghost" href="{{ url_for('employees.index') }}">Отмена</a>
+  </div>
+</form>
+{% endblock %}

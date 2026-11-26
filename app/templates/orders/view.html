@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Заказ-наряд № {{ order.id|order_no }}{% endblock %}
+{% block content %}
+{% set can_edit = has_role('admin', 'manager') %}
+{% set is_admin = has_role('admin') %}
+<div class="breadcrumbs"><a href="{{ url_for('orders.index') }}">Заказ-наряды</a></div>
+<div class="page-head">
+  <div>
+    <div class="order-head"><h1>Заказ-наряд № {{ order.id|order_no }}</h1>{{ status_badge(order.status) }}</div>
+    <div class="sub">от {{ order.created_at|datetime }}{% if order.created_by_name %} · принял {{ order.created_by_name }}{% endif %}</div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{{ url_for('orders.print_order', order_id=order.id) }}" target="_blank">{{ icon('print') }}Печать</a>
+    {% if can_edit %}<a class="btn" href="{{ url_for('orders.edit', order_id=order.id) }}">{{ icon('edit') }}Изменить</a>{% endif %}
+    {% if is_admin %}
+    <form class="inline" method="post" action="{{ url_for('orders.delete', order_id=order.id) }}" data-confirm="Удалить заказ-наряд № {{ order.id|order_no }}? Запчасти вернутся на склад.">{{ csrf() }}<button class="btn btn-danger btn-icon" title="Удалить">{{ icon('trash') }}</button></form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body" style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: space-between;">
+    <form class="status-form" method="post" action="{{ url_for('orders.change_status', order_id=order.id) }}">
+      {{ csrf() }}
+      <label class="label" for="status" style="margin: 0;">Статус</label>
+      <select id="status" name="status">
+        {% for k, v in ORDER_STATUSES.items() %}
+          {% if can_edit or k not in ('issued', 'cancelled') or k == order.status %}
+          <option value="{{ k }}" {{ 'selected' if k == order.status }}>{{ v }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+      <button class="btn">Изменить</button>
+    </form>
+    <div class="actions">
+      {% if order.status in ('new', 'diagnostics', 'waiting_parts') %}
+      <form class="inline" method="post" action="{{ url_for('orders.change_status', order_id=order.id) }}">{{ csrf() }}<input type="hidden" name="status" value="in_progress"><button class="btn">В работу</button></form>
+      {% endif %}
+      {% if order.status in ('new', 'diagnostics', 'in_progress', 'waiting_parts') %}
+      <form class="inline" method="post" action="{{ url_for('orders.change_status', order_id=order.id) }}">{{ csrf() }}<input type="hidden" name="status" value="done"><button class="btn btn-success">Работы выполнены</button></form>
+      {% endif %}
+      {% if order.status == 'done' and can_edit %}
+      <form class="inline" method="post" action="{{ url_for('orders.change_status', order_id=order.id) }}" {% if due > 0 %}data-confirm="Заказ-наряд оплачен не полностью (долг {{ due|money }}). Всё равно выдать?"{% endif %}>{{ csrf() }}<input type="hidden" name="status" value="issued"><button class="btn btn-primary">Выдать клиенту</button></form>
+      {% endif %}
+    </div>
+  </div>
+  {% if order.status == 'cancelled' %}
+  <div class="card-foot muted">Заказ-наряд отменён. Чтобы продолжить работу с ним, смените статус.</div>
+  {% elif order.status == 'issued' %}
+  <div class="card-foot muted">Техника выдана {{ order.issued_at|datetime }}. Состав работ и запчастей заблокирован — чтобы изменить, верните статус «Готов».</div>
+  {% endif %}
+</div>
+
+<div class="grid grid-main">
+  <div class="stack">
+    <!-- Работы -->
+    <div class="card" id="services">
+      <div class="card-head"><h2>Работы</h2><span class="strong">{{ services_total|money }}</span></div>
+      {% if service_lines %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Работа</th><th class="hide-sm">Мастер</th><th class="num">Кол-во</th><th class="num">Цена</th><th class="num">Сумма</th>{% if is_admin %}<th class="num hide-sm">Мастеру</th>{% endif %}{% if can_edit and not locked %}<th></th>{% endif %}</tr></thead>
+          <tbody>
+          {% for line in service_lines %}
+            <tr>
+              <td class="line-view wrap">{{ line.name }}<div class="muted small show-sm-only">{{ line.master_name or '' }}</div></td>
+              <td class="line-view hide-sm">{{ line.master_name or '—' }}</td>
+              <td class="line-view num">{{ line.quantity|qty }}</td>
+              <td class="line-view num">{{ line.price|money }}</td>
+              <td class="line-view num strong">{{ (line.quantity * line.price)|money }}</td>
+              {% if is_admin %}<td class="line-view num hide-sm muted">{{ (line.quantity * line.price * line.master_percent / 100)|money }}<div class="small">{{ line.master_percent|qty }}%</div></td>{% endif %}
+              {% if can_edit and not locked %}
+              <td class="line-view actions-cell">
+                <button type="button" class="btn btn-sm btn-ghost btn-icon" data-edit-line title="Изменить">{{ icon('edit') }}</button>
+                <form class="inline" method="post" action="{{ url_for('orders.delete_service', order_id=order.id, line_id=line.id) }}">{{ csrf() }}<button class="btn btn-sm btn-ghost btn-icon" title="Удалить">{{ icon('trash') }}</button></form>
+              </td>
+              <td class="line-edit" colspan="{{ 7 if is_admin else 6 }}">
+                <form class="line-form" method="post" action="{{ url_for('orders.update_service', order_id=order.id, line_id=line.id) }}">
+                  {{ csrf() }}
+                  <input class="compact lf-name" type="text" name="name" value="{{ line.name }}" title="Название">
+                  <input class="compact" type="text" inputmode="decimal" name="quantity" value="{{ line.quantity|num }}" title="Количество">
+                  <input class="compact" type="text" inputmode="decimal" name="price" value="{{ line.price|num }}" title="Цена">
+                  {% if is_admin %}<input class="compact" type="text" inputmode="decimal" name="master_percent" value="{{ line.master_percent|num }}" title="% мастеру">{% else %}<span></span>{% endif %}
+                  <select class="compact lf-master" name="master_id" title="Мастер">
+                    <option value="">— мастер —</option>
+                    {% for m in masters %}<option value="{{ m.id }}" {{ 'selected' if m.id == line.master_id }}>{{ m.full_name }}</option>{% endfor %}
+                  </select>
+                  <span class="nowrap"><button class="btn btn-sm btn-primary">Сохранить</button> <button type="button" class="btn btn-sm btn-ghost" data-cancel-edit>Отмена</button></span>
+                </form>
+              </td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">Работы ещё не добавлены.</div>
+      {% endif %}
+      {% if can_edit and not locked %}
+      <form class="add-line add-line-services" method="post" action="{{ url_for('orders.add_service', order_id=order.id) }}">
+        {{ csrf() }}
+        <div class="ls-service">
+          <span class="label">Услуга из прайса</span>
+          <div class="picker">
+          <input type="search" class="compact picker-filter" data-filter-for="service-select" placeholder="Поиск по прайсу…">
+          <select id="service-select" name="service_id" class="compact" data-fill>
+            <option value="">— выберите —</option>
+            {% set ns = namespace(cat=None) %}
+            {% for s in catalog_services %}
+              {% if s.category != ns.cat %}{% if ns.cat is not none %}</optgroup>{% endif %}<optgroup label="{{ s.category or 'Без категории' }}">{% set ns.cat = s.category %}{% endif %}
+              <option value="{{ s.id }}" data-price="{{ s.price|num }}" data-master-percent="{{ s.master_percent|num }}">{{ s.name }} — {{ s.price|money }}</option>
+            {% endfor %}
+            {% if ns.cat is not none %}</optgroup>{% endif %}
+          </select>
+          </div>
+          <details style="margin-top: 4px;"><summary class="small muted" style="cursor: pointer;">Работа не из прайса</summary><input type="text" class="compact" name="name" placeholder="Название работы" style="margin-top: 4px;"></details>
+        </div>
+        <div><span class="label">Кол-во</span><input type="text" inputmode="decimal" class="compact" name="quantity" value="1"></div>
+        <div><span class="label">Цена, ₽</span><input type="text" inputmode="decimal" class="compact" name="price"></div>
+        {% if is_admin %}<div><span class="label">% мастеру</span><input type="text" inputmode="decimal" class="compact" name="master_percent"></div>{% else %}<div></div>{% endif %}
+        <div class="ls-master"><span class="label">Мастер</span>
+          <select name="master_id" class="compact">
+            <option value="">—</option>
+            {% for m in masters %}<option value="{{ m.id }}" {{ 'selected' if m.id == default_master }}>{{ m.full_name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div><button class="btn btn-primary">{{ icon('plus') }}Добавить</button></div>
+      </form>
+      {% endif %}
+    </div>
+
+    <!-- Запчасти -->
+    <div class="card" id="parts">
+      <div class="card-head"><h2>Запчасти и материалы</h2><span class="strong">{{ parts_total|money }}</span></div>
+      {% if part_lines %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Наименование</th><th class="hide-sm">Артикул</th><th class="num">Кол-во</th><th class="num">Цена</th><th class="num">Сумма</th>{% if can_edit and not locked %}<th></th>{% endif %}</tr></thead>
+          <tbody>
+          {% for line in part_lines %}
+            <tr>
+              <td class="line-view wrap">{% if can_edit %}<a href="{{ url_for('warehouse.view', part_id=line.part_id) }}">{{ line.name }}</a>{% else %}{{ line.name }}{% endif %}</td>
+              <td class="line-view hide-sm">{{ line.sku or '' }}</td>
+              <td class="line-view num">{{ line.quantity|qty }} {{ line.unit }}</td>
+              <td class="line-view num">{{ line.price|money }}</td>
+              <td class="line-view num strong">{{ (line.quantity * line.price)|money }}</td>
+              {% if can_edit and not locked %}
+              <td class="line-view actions-cell">
+                <button type="button" class="btn btn-sm btn-ghost btn-icon" data-edit-line title="Изменить">{{ icon('edit') }}</button>
+                <form class="inline" method="post" action="{{ url_for('orders.delete_part', order_id=order.id, line_id=line.id) }}" data-confirm="Убрать «{{ line.name }}» из заказ-наряда и вернуть на склад?">{{ csrf() }}<button class="btn btn-sm btn-ghost btn-icon" title="Вернуть на склад">{{ icon('trash') }}</button></form>
+              </td>
+              <td class="line-edit" colspan="6">
+                <form class="line-form parts" method="post" action="{{ url_for('orders.update_part', order_id=order.id, line_id=line.id) }}">
+                  {{ csrf() }}
+                  <input class="compact" type="text" inputmode="decimal" name="quantity" value="{{ line.quantity|num }}" title="Количество">
+                  <input class="compact" type="text" inputmode="decimal" name="price" value="{{ line.price|num }}" title="Цена">
+                  <span class="nowrap"><button class="btn btn-sm btn-primary">Сохранить</button> <button type="button" class="btn btn-sm btn-ghost" data-cancel-edit>Отмена</button> <span class="muted small">{{ line.name }}, на складе ещё {{ line.stock_quantity|qty }}</span></span>
+                </form>
+              </td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">Запчасти не добавлены.</div>
+      {% endif %}
+      {% if can_edit and not locked %}
+      <form class="add-line add-line-parts" method="post" action="{{ url_for('orders.add_part', order_id=order.id) }}">
+        {{ csrf() }}
+        <div class="lp-part">
+          <span class="label">Со склада</span>
+          <input type="search" class="compact picker-filter" data-filter-for="part-select" placeholder="Поиск: название, артикул…">
+          <select id="part-select" name="part_id" class="compact" data-fill required>
+            <option value="">— выберите —</option>
+            {% for p in catalog_parts %}<option value="{{ p.id }}" data-price="{{ p.sale_price|num }}" data-stock="{{ p.quantity|qty }} {{ p.unit }}" {{ 'disabled' if p.quantity <= 0 }}>{{ p.name }}{% if p.sku %} · {{ p.sku }}{% endif %} — {{ p.sale_price|money }} (ост. {{ p.quantity|qty }} {{ p.unit }})</option>{% endfor %}
+          </select>
+          <div class="muted small" data-stock-info></div>
+        </div>
+        <div><span class="label">Кол-во</span><input type="text" inputmode="decimal" class="compact" name="quantity" value="1"></div>
+        <div><span class="label">Цена, ₽</span><input type="text" inputmode="decimal" class="compact" name="price"></div>
+        <div><button class="btn btn-primary">{{ icon('plus') }}Списать в заказ</button></div>
+      </form>
+      {% endif %}
+    </div>
+
+    <!-- Диагностика -->
+    <form class="card" id="diagnosis" method="post" action="{{ url_for('orders.update_diagnosis', order_id=order.id) }}">
+      {{ csrf() }}
+      <div class="card-head"><h2>Диагностика и рекомендации</h2></div>
+      <div class="card-body stack">
+        <div class="field"><label for="diag">Результат диагностики</label><textarea id="diag" name="diagnosis" rows="3" placeholder="Что выявлено при проверке на стенде…">{{ order.diagnosis or '' }}</textarea></div>
+        <div class="field"><label for="rec">Рекомендации клиенту</label><textarea id="rec" name="recommendations" rows="2">{{ order.recommendations or '' }}</textarea></div>
+        <div><button class="btn">Сохранить</button></div>
+      </div>
+    </form>
+  </div>
+
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>Клиент и техника</h2></div>
+      <div class="card-body">
+        <dl class="props">
+          <dt>Клиент</dt><dd>{% if can_edit %}<a class="strong" href="{{ url_for('clients.view', client_id=order.client_id) }}">{{ order.client_name }}</a>{% else %}<span class="strong">{{ order.client_name }}</span>{% endif %}</dd>
+          <dt>Телефон</dt><dd>{% if order.client_phone %}<a href="tel:{{ order.client_phone }}">{{ order.client_phone }}</a>{% else %}—{% endif %}</dd>
+          {% if order.vehicle_id %}
+          <dt>Техника</dt><dd>{{ order.make or '' }} {{ order.model or '' }}{% if order.year %} ({{ order.year }}){% endif %}</dd>
+          {% if order.plate %}<dt>Госномер</dt><dd>{{ order.plate }}</dd>{% endif %}
+          {% if order.vin %}<dt>VIN</dt><dd>{{ order.vin }}</dd>{% endif %}
+          {% if order.engine %}<dt>Двигатель</dt><dd>{{ order.engine }}</dd>{% endif %}
+          {% if order.fuel_system %}<dt>Топл. аппаратура</dt><dd>{{ order.fuel_system }}</dd>{% endif %}
+          {% endif %}
+          {% if order.mileage %}<dt>Пробег</dt><dd>{{ order.mileage|qty }}</dd>{% endif %}
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Приём</h2></div>
+      <div class="card-body stack">
+        <dl class="props">
+          <dt>Ответственный</dt><dd>{{ order.responsible_name or '—' }}</dd>
+          <dt>Срок</dt><dd class="{{ 'text-danger' if order.planned_date and order.planned_date < today and order.status not in ('done', 'issued', 'cancelled') }}">{{ order.planned_date|date or '—' }}</dd>
+          {% if order.completed_at %}<dt>Выполнен</dt><dd>{{ order.completed_at|datetime }}</dd>{% endif %}
+          {% if order.issued_at %}<dt>Выдан</dt><dd>{{ order.issued_at|datetime }}</dd>{% endif %}
+        </dl>
+        {% if order.complaint %}<div><div class="label">Неисправность со слов клиента</div><div class="pre">{{ order.complaint }}</div></div>{% endif %}
+        {% if order.units %}<div><div class="label">Принятые агрегаты</div><div class="pre">{{ order.units }}</div></div>{% endif %}
+        {% if order.notes %}<div class="notice pre">{{ order.notes }}</div>{% endif %}
+      </div>
+    </div>
+
+    <div class="card" id="payments">
+      <div class="card-head"><h2>Итого и оплата</h2></div>
+      <div class="card-body">
+        <div class="totals">
+          <span>Работы</span><span class="num">{{ services_total|money }}</span>
+          <span>Запчасти</span><span class="num">{{ parts_total|money }}</span>
+          <span class="grand">Итого</span><span class="grand num">{{ order.total|money }}</span>
+          <span>Оплачено</span><span class="num text-success">{{ order.paid|money }}</span>
+          <span class="strong">{{ 'Переплата' if due < 0 else 'К оплате' }}</span><span class="num strong {{ 'text-danger' if due > 0 }}">{{ due|abs|money }}</span>
+        </div>
+      </div>
+      {% if payments %}
+      <table class="table">
+        <tbody>
+        {% for p in payments %}
+          <tr>
+            <td class="nowrap">{{ p.date|date }}</td>
+            <td>{{ PAYMENT_METHODS[p.method] }}</td>
+            <td class="num">{{ p.amount|money }}</td>
+            {% if is_admin %}<td class="actions-cell"><form class="inline" method="post" action="{{ url_for('orders.delete_payment', order_id=order.id, tx_id=p.id) }}" data-confirm="Удалить оплату {{ p.amount|money }}?">{{ csrf() }}<button class="btn btn-sm btn-ghost btn-icon" title="Удалить">{{ icon('trash') }}</button></form></td>{% endif %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+      {% if can_edit and order.status != 'cancelled' %}
+      <form class="card-foot stack" method="post" action="{{ url_for('orders.add_payment', order_id=order.id) }}">
+        {{ csrf() }}
+        <div class="form-grid" style="gap: 8px;">
+          <div class="field"><label for="amount">Сумма, ₽</label><input type="text" inputmode="decimal" id="amount" name="amount" value="{{ due|num if due > 0 else '' }}"></div>
+          <div class="field"><label for="method">Способ</label><select id="method" name="method">{% for k, v in PAYMENT_METHODS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+          <div class="field full"><label for="pay-date">Дата</label><input type="date" id="pay-date" name="date" value="{{ today }}"></div>
+        </div>
+        <button class="btn btn-success" style="width: 100%;">Принять оплату</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

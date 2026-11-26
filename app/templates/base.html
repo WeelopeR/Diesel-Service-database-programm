@@ -1,0 +1,64 @@
+{% from "macros.html" import icon, csrf with context %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %}{% if self.title() %} · {% endif %}{{ company_name or "Дизельный сервис" }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23f59e0b'/><text x='16' y='22' font-size='16' text-anchor='middle' font-family='Arial' font-weight='bold' fill='%23111827'>Д</text></svg>">
+</head>
+<body>
+{% set endpoint = request.endpoint or '' %}
+<div class="topbar">
+  <button type="button" data-nav-toggle aria-label="Меню">{{ icon('menu') }}</button>
+  <span class="brand-mark">Д</span>
+  <strong>{{ company_name or "Дизельный сервис" }}</strong>
+</div>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">Д</span><span class="brand-name">{{ company_name or "Дизельный сервис" }}</span></div>
+    <nav class="nav">
+      <a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if endpoint.startswith('dashboard.') }}">{{ icon('home') }}Главная</a>
+      <a href="{{ url_for('orders.index') }}" class="{{ 'active' if endpoint.startswith('orders.') }}">{{ icon('orders') }}Заказ-наряды</a>
+      {% if has_role('admin', 'manager') %}
+      <a href="{{ url_for('clients.index') }}" class="{{ 'active' if endpoint.startswith('clients.') }}">{{ icon('clients') }}Клиенты</a>
+      <a href="{{ url_for('services.index') }}" class="{{ 'active' if endpoint.startswith('services.') }}">{{ icon('services') }}Услуги</a>
+      <a href="{{ url_for('warehouse.index') }}" class="{{ 'active' if endpoint.startswith('warehouse.') }}">{{ icon('warehouse') }}Склад</a>
+      {% endif %}
+      {% if has_role('admin') %}
+      <div class="nav-label">Бухгалтерия</div>
+      <a href="{{ url_for('finance.index') }}" class="{{ 'active' if endpoint.startswith('finance.') }}">{{ icon('finance') }}Доходы и расходы</a>
+      <a href="{{ url_for('salary.index') }}" class="{{ 'active' if endpoint.startswith('salary.') }}">{{ icon('salary') }}Зарплата</a>
+      <div class="nav-label">Управление</div>
+      <a href="{{ url_for('employees.index') }}" class="{{ 'active' if endpoint.startswith('employees.') }}">{{ icon('employees') }}Сотрудники</a>
+      <a href="{{ url_for('settings.index') }}" class="{{ 'active' if endpoint.startswith('settings.') }}">{{ icon('settings') }}Настройки</a>
+      {% elif current_user and current_user.is_master %}
+      <a href="{{ url_for('salary.detail', employee_id=current_user.id) }}" class="{{ 'active' if endpoint.startswith('salary.') }}">{{ icon('salary') }}Моя зарплата</a>
+      {% endif %}
+    </nav>
+    {% if current_user %}
+    <div class="sidebar-footer">
+      <div class="user">{{ current_user.full_name }}</div>
+      <div class="role">{{ ROLES[current_user.role] }}</div>
+      <div class="links">
+        <a href="{{ url_for('auth.change_password') }}">Сменить пароль</a>
+        <form class="inline" method="post" action="{{ url_for('auth.logout') }}">{{ csrf() }}<button class="linklike">Выйти</button></form>
+      </div>
+    </div>
+    {% endif %}
+  </aside>
+  <main class="main">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flashes">
+      {% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

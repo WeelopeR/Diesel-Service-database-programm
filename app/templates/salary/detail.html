@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Зарплата — {{ employee.full_name }}{% endblock %}
+{% block content %}
+{% if has_role('admin') %}<div class="breadcrumbs"><a href="{{ url_for('salary.index', start=start.isoformat(), end=end.isoformat()) }}">Зарплата</a></div>{% endif %}
+<div class="page-head">
+  <div><h1>{{ 'Моя зарплата' if employee.id == current_user.id else employee.full_name }}</h1><div class="sub">{{ start|date }} — {{ end|date }}</div></div>
+</div>
+{{ period_filter('salary.detail', start, end, presets, path_args={'employee_id': employee.id}) }}
+<div class="kpis">
+  <div class="kpi"><div class="kpi-label">Выполнено работ</div><div class="kpi-value">{{ summary.works }}</div><div class="kpi-note">в {{ summary.orders }} заказ-нарядах на {{ summary.revenue|money }}</div></div>
+  <div class="kpi"><div class="kpi-label">Начислено за период</div><div class="kpi-value">{{ summary.accrued|money }}</div></div>
+  <div class="kpi"><div class="kpi-label">Выплачено за период</div><div class="kpi-value">{{ summary.paid|money }}</div></div>
+  <div class="kpi"><div class="kpi-label">К выплате (всего)</div><div class="kpi-value {{ 'text-danger' if summary.balance > 0 }}">{{ summary.balance|money }}</div></div>
+</div>
+<div class="grid grid-main">
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>Выполненные работы</h2></div>
+      {% if lines %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Дата</th><th>Заказ-наряд</th><th>Работа</th><th class="num">Сумма</th><th class="num">%</th><th class="num">Начислено</th></tr></thead>
+          <tbody>
+          {% for l in lines %}
+            <tr>
+              <td class="nowrap">{{ l.completed_at|date }}</td>
+              <td><a href="{{ url_for('orders.view', order_id=l.order_id) }}">№ {{ l.order_id|order_no }}</a><div class="muted small">{{ l.client_name }}{% if l.plate %} · {{ l.plate }}{% endif %}</div></td>
+              <td class="wrap">{{ l.name }}{% if l.quantity != 1 %} <span class="muted">× {{ l.quantity|qty }}</span>{% endif %}</td>
+              <td class="num">{{ l.amount|money }}</td>
+              <td class="num">{{ l.master_percent|qty }}%</td>
+              <td class="num strong">{{ l.earned|money }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+          <tfoot><tr><td colspan="3">Итого</td><td class="num">{{ summary.revenue|money }}</td><td></td><td class="num">{{ summary.accrued|money }}</td></tr></tfoot>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">За период нет выполненных работ.</div>
+      {% endif %}
+    </div>
+    {% if in_progress %}
+    <div class="card">
+      <div class="card-head"><h2>Работы в незакрытых заказ-нарядах</h2><span class="muted small">попадут в зарплату после статуса «Готов»</span></div>
+      <div class="table-wrap">
+        <table class="table">
+          <tbody>
+          {% for l in in_progress %}
+            <tr><td><a href="{{ url_for('orders.view', order_id=l.order_id) }}">№ {{ l.order_id|order_no }}</a></td><td>{{ status_badge(l.status) }}</td><td class="wrap">{{ l.name }}</td><td class="num">{{ l.earned|money }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  <div class="stack">
+    <div class="card">
+      <div class="card-head"><h2>Выплаты за период</h2></div>
+      {% if paid_rows %}
+      <table class="table">
+        <tbody>
+        {% for p in paid_rows %}
+          <tr><td class="nowrap">{{ p.date|date }}</td><td>{{ p.category }}{% if p.description %}<div class="muted small">{{ p.description }}</div>{% endif %}</td><td class="num strong">{{ p.amount|money }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">Выплат не было.</div>
+      {% endif %}
+      {% if has_role('admin') %}
+      <form class="card-foot stack" method="post" action="{{ url_for('salary.pay', employee_id=employee.id) }}" id="pay">
+        {{ csrf() }}
+        <input type="hidden" name="back" value="{{ request.full_path }}">
+        <div class="form-grid" style="gap: 8px;">
+          <div class="field"><label for="amount">Сумма, ₽</label><input type="text" inputmode="decimal" id="amount" name="amount" value="{{ summary.balance|num if summary.balance > 0 else '' }}"></div>
+          <div class="field"><label for="method">Способ</label><select id="method" name="method">{% for k, v in PAYMENT_METHODS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+          <div class="field"><label for="date">Дата</label><input type="date" id="date" name="date" value="{{ today }}"></div>
+          <div class="field"><label for="note">Комментарий</label><input type="text" id="note" name="note" placeholder="Аванс, зарплата за …"></div>
+        </div>
+        <button class="btn btn-primary" style="width: 100%;">Записать выплату</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

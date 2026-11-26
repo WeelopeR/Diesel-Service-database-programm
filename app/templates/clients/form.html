@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}{{ 'Редактирование клиента' if edit else 'Новый клиент' }}{% endblock %}
+{% block content %}
+<div class="breadcrumbs"><a href="{{ url_for('clients.index') }}">Клиенты</a>{% if edit %} / <a href="{{ url_for('clients.view', client_id=client.id) }}">{{ client.name }}</a>{% endif %}</div>
+<div class="page-head"><h1>{{ 'Редактирование клиента' if edit else 'Новый клиент' }}</h1></div>
+<form method="post" class="stack" style="max-width: 900px;">
+  {{ csrf() }}
+  <input type="hidden" name="next" value="{{ next_url or '' }}">
+  <div class="card">
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="field full">
+          <span class="label">Тип клиента</span>
+          <div class="segmented">
+            <label><input type="radio" name="kind" value="person" {{ 'checked' if client.kind != 'company' }}><span>Физлицо</span></label>
+            <label><input type="radio" name="kind" value="company" {{ 'checked' if client.kind == 'company' }}><span>Организация</span></label>
+          </div>
+        </div>
+        <div class="field full">
+          <label for="name">ФИО или название организации *</label>
+          <input type="text" id="name" name="name" value="{{ client.name or '' }}" required autofocus>
+        </div>
+        <div class="field"><label for="phone">Телефон</label><input type="tel" id="phone" name="phone" value="{{ client.phone or '' }}" placeholder="+7 ..."></div>
+        <div class="field"><label for="phone2">Доп. телефон</label><input type="tel" id="phone2" name="phone2" value="{{ client.phone2 or '' }}"></div>
+        <div class="field"><label for="email">E-mail</label><input type="email" id="email" name="email" value="{{ client.email or '' }}"></div>
+        <div class="field"><label for="inn">ИНН</label><input type="text" id="inn" name="inn" value="{{ client.inn or '' }}"></div>
+        <div class="field full"><label for="address">Адрес / реквизиты</label><textarea id="address" name="address" rows="2">{{ client.address or '' }}</textarea></div>
+        <div class="field full"><label for="notes">Заметки</label><textarea id="notes" name="notes" rows="2">{{ client.notes or '' }}</textarea></div>
+      </div>
+    </div>
+  </div>
+
+  {% if not edit %}
+  <div class="card">
+    <div class="card-head"><h2>Техника клиента</h2><span class="muted small">можно заполнить позже</span></div>
+    <div class="card-body">
+      {% set prefix = 'v_' %}
+      {% include "clients/_vehicle_fields.html" %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="form-actions">
+    <button class="btn btn-primary">{{ 'Сохранить' if edit else ('Сохранить и перейти к заказ-наряду' if next_url == 'order' else 'Добавить клиента') }}</button>
+    <a class="btn btn-ghost" href="{{ url_for('clients.view', client_id=client.id) if edit else url_for('clients.index') }}">Отмена</a>
+  </div>
+</form>
+{% endblock %}

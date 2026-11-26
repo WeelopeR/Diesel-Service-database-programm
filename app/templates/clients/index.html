@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "macros.html" import icon, csrf, status_badge, pagination, period_filter with context %}
+{% block title %}Клиенты{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Клиенты</h1><div class="sub">{{ page.total }} в базе</div></div>
+  <div class="actions"><a class="btn btn-primary" href="{{ url_for('clients.create') }}">{{ icon('plus') }}Новый клиент</a></div>
+</div>
+<form class="toolbar" method="get">
+  <input class="search" type="search" name="q" value="{{ q }}" placeholder="Имя, телефон, ИНН, госномер или VIN" autofocus>
+  <button class="btn">Найти</button>
+  {% if q %}<a class="btn btn-ghost" href="{{ url_for('clients.index') }}">Сбросить</a>{% endif %}
+</form>
+<div class="card">
+  {% if page.rows %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Клиент</th><th>Телефон</th><th class="hide-sm">Тип</th><th class="num">Техника</th><th class="num">Заказов</th><th class="hide-sm">Последний визит</th></tr></thead>
+      <tbody>
+      {% for c in page.rows %}
+        <tr data-href="{{ url_for('clients.view', client_id=c.id) }}">
+          <td><a href="{{ url_for('clients.view', client_id=c.id) }}" class="strong">{{ c.name }}</a>{% if c.inn %}<div class="muted small">ИНН {{ c.inn }}</div>{% endif %}</td>
+          <td class="nowrap">{{ c.phone or '—' }}</td>
+          <td class="hide-sm">{{ CLIENT_KINDS[c.kind] }}</td>
+          <td class="num">{{ c.vehicles_count }}</td>
+          <td class="num">{{ c.orders_count }}</td>
+          <td class="hide-sm">{{ c.last_visit|date or '—' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ pagination(page, 'clients.index') }}
+  {% else %}
+  <div class="empty">{% if q %}Ничего не найдено по запросу «{{ q }}».{% else %}Клиентов пока нет. <a href="{{ url_for('clients.create') }}">Добавьте первого</a>.{% endif %}</div>
+  {% endif %}
+</div>
+{% endblock %}
