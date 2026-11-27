@@ -243,7 +243,12 @@ def price_with_markup(purchase_price, markup_percent):
     """Цена продажи по наценке: от 100 ₽ — всегда вверх до 50 ₽
     (120 → 150, 151 → 200, 1 521 → 1 550), дешевле 100 ₽ — не округляется."""
     # Сначала до копеек, чтобы 1000 × 1,3 = 1300,0000000002 не превратилось в 1400.
-    raw = money_round(float(purchase_price or 0) * (1 + float(markup_percent or 0) / 100))
+    return round_sale_price(float(purchase_price or 0) * (1 + float(markup_percent or 0) / 100))
+
+
+def round_sale_price(value):
+    """Округление цены продажи: от 100 ₽ — вверх до 50 ₽, дешевле — до копеек."""
+    raw = money_round(value)
     if raw <= 0:
         return 0.0
     if raw < 100:

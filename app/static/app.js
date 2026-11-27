@@ -125,6 +125,43 @@
     var template = document.getElementById("receipt-row-template");
     var counter = 0;
 
+    var updatePrices = document.getElementById("update-prices");
+
+    function toNum(v) {
+      v = parseFloat(String(v || "").replace(/\s/g, "").replace(",", "."));
+      return isNaN(v) ? null : v;
+    }
+    function rub(v) { return v.toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " ₽"; }
+    // Как на сервере: от 100 ₽ — вверх до 50 ₽, дешевле — без округления.
+    function roundSale(v) {
+      var raw = Math.round(v * 100) / 100;
+      return raw <= 0 ? 0 : (raw < 100 ? raw : Math.ceil(raw / 50) * 50);
+    }
+
+    // Цена продажи в строке: текущая или «старая → новая», если закупка подорожала.
+    function showSale(row) {
+      var select = row.querySelector("select");
+      var opt = select.options[select.selectedIndex];
+      var cell = row.querySelector("[data-sale-preview]");
+      cell.classList.remove("price-up");
+      if (!opt || !opt.value) { cell.textContent = ""; return; }
+      var markup = toNum(opt.getAttribute("data-markup"));
+      var purchase = toNum(opt.getAttribute("data-price")) || 0;
+      var sale = toNum(opt.getAttribute("data-sale")) || 0;
+      var price = toNum(row.querySelector("[name=price]").value) || 0;
+      var basis = markup !== null ? " · +" + opt.getAttribute("data-markup") + "%" : " · вручную";
+      if (updatePrices && updatePrices.checked && price > purchase + 0.009) {
+        var next = markup !== null ? roundSale(price * (1 + markup / 100))
+          : (purchase > 0 && sale > 0 ? roundSale(price * sale / purchase) : sale);
+        if (next > sale + 0.009) {
+          cell.textContent = rub(sale) + " → " + rub(next) + basis;
+          cell.classList.add("price-up");
+          return;
+        }
+      }
+      cell.textContent = rub(sale) + basis;
+    }
+
     function recalc() {
       var total = 0;
       $all("tr", receiptBody).forEach(function (row) {
@@ -133,6 +170,7 @@
         var sum = (isNaN(q) || isNaN(p)) ? 0 : q * p;
         row.querySelector("[data-sum]").textContent = sum ? sum.toLocaleString("ru-RU", { maximumFractionDigits: 2 }) : "";
         total += sum;
+        showSale(row);
       });
       document.getElementById("receipt-total").textContent =
         total.toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " ₽";
@@ -156,9 +194,6 @@
         var opt = select.options[select.selectedIndex];
         row.querySelector("[name=price]").value = opt.getAttribute("data-price") || "";
         row.querySelector("[data-unit]").textContent = opt.getAttribute("data-unit") || "";
-        var markup = opt.getAttribute("data-markup");
-        row.querySelector("[data-sale]").textContent = opt.value
-          ? (opt.getAttribute("data-sale") || "") + (markup ? " · +" + markup + "%" : " · вручную") : "";
         recalc();
       });
       row.querySelector("[data-remove]").addEventListener("click", function () {
@@ -174,6 +209,7 @@
       }
     }
 
+    if (updatePrices) updatePrices.addEventListener("change", recalc);
     document.getElementById("receipt-add").addEventListener("click", function () { addRow(); });
     addRow(receiptBody.getAttribute("data-preselect"));
   }

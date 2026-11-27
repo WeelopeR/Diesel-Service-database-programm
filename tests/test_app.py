@@ -424,6 +424,48 @@ def test_markup_price_rounding(app, admin):
     assert row["markup_percent"] is None and row["sale_price"] == 1234
 
 
+def test_receipt_raises_sale_price_only_when_purchase_rises(app, admin):
+    by_markup = make_part(app, admin, "Фильтр топливный", purchase_price="1000", markup_percent="30")
+    manual = make_part(app, admin, "Форсунка готовая", purchase_price="200", sale_price="330")
+    no_price = make_part(app, admin, "Новая позиция", markup_percent="50")
+
+    def receive(part_id, price, update=True):
+        data = {"part_id": str(part_id), "quantity": "1", "price": price}
+        if update:
+            data["update_prices"] = "1"
+        return post(admin, "/warehouse/receipt", data)
+
+    def card(part_id):
+        row = query(app, "SELECT purchase_price, sale_price FROM parts WHERE id = ?", (part_id,))[0]
+        return row["purchase_price"], row["sale_price"]
+
+    assert card(by_markup) == (1000, 1300)
+    # Подорожала: 1 080 × 1,3 = 1 404 → вверх до 50 ₽ = 1 450
+    response = receive(by_markup, "1080")
+    assert card(by_markup) == (1080, 1450)
+    page = text(admin.get(response.headers["Location"]))
+    assert "цена продажи повышена" in page and "1 300 ₽ → 1 450 ₽" in page.replace("\xa0", " ")
+    # Подешевела или та же цена — карточка не меняется, цена продажи не снижается
+    receive(by_markup, "900")
+    assert card(by_markup) == (1080, 1450)
+    receive(by_markup, "1080")
+    assert card(by_markup) == (1080, 1450)
+    # Галочка снята — карточка не меняется даже при подорожании
+    receive(by_markup, "1500", update=False)
+    assert card(by_markup) == (1080, 1450)
+
+    # Без наценки: та же разница, что была (330 / 200), 250 × 1,65 = 412,5 → 450
+    receive(manual, "250")
+    assert card(manual) == (250, 450)
+    receive(manual, "240")
+    assert card(manual) == (250, 450)
+
+    # Закупка была не указана, наценка есть: 80 × 1,5 = 120 → 150
+    receive(no_price, "80")
+    assert card(no_price) == (80, 150)
+    assert scalar(app, "SELECT quantity FROM parts WHERE id = ?", (by_markup,)) == 4
+
+
 def test_prices_recalculated_after_update(tmp_path):
     """Цены по наценке, посчитанные прошлыми версиями (до ближайшей сотни, минимум 100 ₽;
     вверх до сотни), пересчитываются по новому правилу при запуске."""

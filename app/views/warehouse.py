@@ -11,7 +11,7 @@ from .. import db
 from ..stock import StockError, move_stock
 from ..utils import (
     CATEGORY_PURCHASE, fmt_money, form_float, form_str, like, money_round, parse_date,
-    period_presets, price_with_markup, to_float, to_int, today_str,
+    period_presets, price_with_markup, round_sale_price, to_float, to_int, today_str,
 )
 
 bp = Blueprint("warehouse", __name__, url_prefix="/warehouse")
@@ -97,14 +97,30 @@ def render_form(part, edit=False):
     return render_template("warehouse/form.html", part=part, edit=edit, categories=categories())
 
 
-def update_purchase_price(part_id, price):
-    """Новая цена закупки; цена продажи пересчитывается, если задана наценка."""
-    part = db.query("SELECT markup_percent FROM parts WHERE id = ?", (part_id,), one=True)
-    if part["markup_percent"] is None:
-        db.execute("UPDATE parts SET purchase_price = ? WHERE id = ?", (price, part_id))
+def apply_receipt_price(part_id, price):
+    """Приход подорожавшей позиции: новая цена закупки в карточке и пересчёт цены продажи.
+
+    С наценкой — по наценке, без неё — с той же разницей между закупкой и продажей,
+    что была. Округление обычное: от 100 ₽ — вверх до 50 ₽. Если закупка не подорожала,
+    карточка не меняется и цена продажи не снижается.
+    Возвращает (старая, новая) цену продажи, если она изменилась, иначе None.
+    """
+    part = db.query("SELECT purchase_price, markup_percent, sale_price FROM parts WHERE id = ?",
+                    (part_id,), one=True)
+    old_purchase = part["purchase_price"] or 0
+    old_sale = part["sale_price"] or 0
+    if price <= old_purchase + 0.009:
+        return None
+    if part["markup_percent"] is not None:
+        sale = price_with_markup(price, part["markup_percent"])
+    elif old_purchase > 0 and old_sale > 0:
+        sale = round_sale_price(price * old_sale / old_purchase)
     else:
-        db.execute("UPDATE parts SET purchase_price = ?, sale_price = ? WHERE id = ?",
-                   (price, price_with_markup(price, part["markup_percent"]), part_id))
+        sale = old_sale
+    sale = max(sale, old_sale)
+    db.execute("UPDATE parts SET purchase_price = ?, sale_price = ? WHERE id = ?",
+               (price, sale, part_id))
+    return (old_sale, sale) if sale > old_sale + 0.009 else None
 
 
 # ---------- Список с фильтрами ----------
@@ -438,12 +454,15 @@ def receipt():
 
         note = f"Документ: {doc}" if doc else None
         total = 0.0
+        repriced = []
         for part_id, qty, price in rows:
-            get_part(part_id)
+            part = get_part(part_id)
             move_stock(part_id, "receipt", qty, price=price, supplier=supplier or None, note=note)
             total += qty * price
             if update_prices and price > 0:
-                update_purchase_price(part_id, price)
+                change = apply_receipt_price(part_id, price)
+                if change:
+                    repriced.append((part["name"], *change))
         total = money_round(total)
         if record_expense and total > 0:
             description = "Приход товара"
@@ -458,6 +477,13 @@ def receipt():
             )
         db.commit()
         flash(f"Приход оформлен: {len(rows)} поз. на сумму {fmt_money(total)}.", "success")
+        if repriced:
+            shown = "; ".join(f"{name}: {fmt_money(old)} → {fmt_money(new)}"
+                              for name, old, new in repriced[:10])
+            if len(repriced) > 10:
+                shown += f" и ещё {len(repriced) - 10}"
+            flash(f"Закупка подорожала — цена продажи повышена ({len(repriced)} поз.): {shown}.",
+                  "warning")
         return redirect(url_for("warehouse.movements"))
     return render_template("warehouse/receipt.html", parts=parts,
                            preselect=to_int(request.args.get("part_id")))
